@@ -1,0 +1,86 @@
+{
+  "$schema": "../schemas/defaults.schema.json",
+  "targetFramework": "net10.0",
+  "branchName": "dependency-agent/net10-lts",
+  "gitIdentity": {
+    "name": "Dependency Agent",
+    "email": "dependency-agent@noreply.local"
+  },
+  "packages": {
+    "enabled": true,
+    "trackTargetMajorFor": [
+      "Microsoft.AspNetCore.*",
+      "Microsoft.EntityFrameworkCore*",
+      "Microsoft.Extensions.*",
+      "System.*",
+      "Microsoft.Data.Sqlite*"
+    ],
+    "allowPrerelease": false,
+    "pins": {},
+    "maxMajor": {},
+    "ignore": []
+  },
+  "docker": {
+    "enabled": true
+  },
+  "verification": {
+    "solution": null,
+    "runTests": true,
+    "failOnNewWarnings": true,
+    "buildArguments": [],
+    "testArguments": [],
+    "buildTimeoutMinutes": 20,
+    "testTimeoutMinutes": 30
+  },
+  "guards": {
+    "maxChangedFiles": 40,
+    "maxChangedLines": 1500,
+    "allowedEditPatterns": ["**/*.cs", "**/*.csproj", "**/*.props", "**/*.targets", "**/*.razor", "**/*.cshtml"],
+    "protectedPatterns": [
+      ".git/**",
+      "**/Authentication/**",
+      "**/Authorization/**",
+      "**/Cryptography/**",
+      "**/Security/**",
+      "**/*.pfx",
+      "**/*.snk",
+      "**/appsettings*.json",
+      "**/azure-pipelines*.yml",
+      "**/.dependency-agent.json"
+    ]
+  },
+  "ruleFixes": {
+    "enabled": true,
+    "formatDiagnostics": [],
+    "rewriteRulesFile": "rewrite-rules.json"
+  },
+  "ai": {
+    "enabled": true,
+    "provider": "copilot",
+    "model": null,
+    "maxIterations": 3,
+    "timeoutMinutes": 20,
+    "copilot": {
+      "executable": "copilot",
+      "tokenVariable": "COPILOT_GITHUB_TOKEN"
+    },
+    "openAi": {
+      "endpoint": null,
+      "apiKeyVariable": "OPENAI_API_KEY",
+      "defaultModel": "gpt-5.1",
+      "maxToolTurns": 40
+    },
+    "learnMcp": {
+      "enabled": true,
+      "endpoint": "https://learn.microsoft.com/api/mcp",
+      "maxQueryLength": 200,
+      "denyTerms": []
+    }
+  },
+  "pullRequest": {
+    "titlePrefix": "[dependency-agent]",
+    "reviewers": [],
+    "workItemIds": [],
+    "labels": ["dependency-agent"]
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "../schemas/rewrite-rules.schema.json",
+  "rules": [
+    {
+      "id": "example-disabled",
+      "enabled": false,
+      "description": "Example only. Rules run when one of 'diagnostics' appears in the failing build and only on files that diagnostic points at.",
+      "diagnostics": ["SYSLIB0000"],
+      "filePattern": "**/*.cs",
+      "find": "\\bOldApi\\.Call\\(",
+      "replace": "NewApi.Call(",
+      "docs": "https://learn.microsoft.com/dotnet/fundamentals/syslib-diagnostics/obsoletions-overview"
+    }
+  ]
+}

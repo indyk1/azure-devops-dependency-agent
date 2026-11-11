@@ -1,0 +1,17 @@
+{
+  "$schema": "../schemas/repositories.schema.json",
+  "repositories": [
+    {
+      "project": "Engineering",
+      "repository": "ExampleService",
+      "baseBranch": "main",
+      "enabled": false,
+      "ring": "pilot",
+      "owners": ["team-example"],
+      "overrides": {
+        "ai": { "provider": "openai" },
+        "verification": { "testArguments": ["--filter", "Category!=Integration"] }
+      }
+    }
+  ]
+}

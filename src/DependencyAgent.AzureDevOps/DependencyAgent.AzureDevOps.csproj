@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DependencyAgent.AzureDevOps</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DependencyAgent.Core/DependencyAgent.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DependencyAgent.AzureDevOps/DependencyAgent.AzureDevOps.csproj" />
+    <Project Path="src/DependencyAgent.Cli/DependencyAgent.Cli.csproj" />
+    <Project Path="src/DependencyAgent.Core/DependencyAgent.Core.csproj" />
+    <Project Path="src/DependencyAgent.Fixing/DependencyAgent.Fixing.csproj" />
+    <Project Path="src/DependencyAgent.LearnProxy/DependencyAgent.LearnProxy.csproj" />
+    <Project Path="src/DependencyAgent.Updates/DependencyAgent.Updates.csproj" />
+    <Project Path="src/DependencyAgent.Verification/DependencyAgent.Verification.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DependencyAgent.AzureDevOps.Tests/DependencyAgent.AzureDevOps.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.Cli.Tests/DependencyAgent.Cli.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.Core.Tests/DependencyAgent.Core.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.Fixing.Tests/DependencyAgent.Fixing.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.LearnProxy.Tests/DependencyAgent.LearnProxy.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.Updates.Tests/DependencyAgent.Updates.Tests.csproj" />
+    <Project Path="tests/DependencyAgent.Verification.Tests/DependencyAgent.Verification.Tests.csproj" />
+  </Folder>
+</Solution>

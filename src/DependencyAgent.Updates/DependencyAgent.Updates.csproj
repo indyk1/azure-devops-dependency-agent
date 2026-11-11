@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DependencyAgent.Updates</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NuGet.Protocol" />
+    <PackageReference Include="NuGet.Versioning" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DependencyAgent.Core/DependencyAgent.Core.csproj" />
+  </ItemGroup>
+</Project>

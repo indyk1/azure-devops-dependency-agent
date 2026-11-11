@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>dependency-agent</AssemblyName>
+    <RootNamespace>DependencyAgent.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../DependencyAgent.Core/DependencyAgent.Core.csproj" />
+    <ProjectReference Include="../DependencyAgent.Updates/DependencyAgent.Updates.csproj" />
+    <ProjectReference Include="../DependencyAgent.Verification/DependencyAgent.Verification.csproj" />
+    <ProjectReference Include="../DependencyAgent.Fixing/DependencyAgent.Fixing.csproj" />
+    <ProjectReference Include="../DependencyAgent.LearnProxy/DependencyAgent.LearnProxy.csproj" />
+    <ProjectReference Include="../DependencyAgent.AzureDevOps/DependencyAgent.AzureDevOps.csproj" />
+  </ItemGroup>
+</Project>
