@@ -325,7 +325,7 @@ public class ConfigLoaderTests
 
     // ---- BuildEffectiveSettings: safety rules ----
 
-    [Fact(Skip = "BUG: when a central override sets an array (guards.protectedPatterns / ai.learnMcp.denyTerms) it replaces the repo file's array during the merge, so the repo's own additions are lost instead of unioned.")]
+    [Fact]
     public void Protected_patterns_are_the_union_of_all_layers_without_duplicates()
     {
         var s = Effective(
@@ -374,7 +374,7 @@ public class ConfigLoaderTests
         Assert.Equal(100, s.Guards.MaxChangedFiles);
     }
 
-    [Fact(Skip = "BUG: BuildEffectiveSettings applies central overrides AFTER the repo file, so a centrally set guards.maxChangedFiles/maxChangedLines masks the repo's lower value (Math.Min is taken against a value that already includes the central override).")]
+    [Fact]
     public void Repo_file_can_lower_a_limit_that_central_raised_above_the_default()
     {
         // Central raises the limit to 100 (explicitly), the repo asks for 20: the repo may only tighten, so 20 is expected.
@@ -393,7 +393,7 @@ public class ConfigLoaderTests
         Assert.False(Effective("""{ "ai": { "enabled": true } }""", """{ "ai": { "enabled": false } }""").Ai.Enabled);
     }
 
-    [Fact(Skip = "BUG: a central override with ai.enabled=true is merged after the repo file, so the repo's ai.enabled=false opt-out is lost (same root cause for ai.learnMcp.enabled).")]
+    [Fact]
     public void Repo_file_can_turn_ai_off_even_when_central_override_sets_it_on_explicitly()
     {
         var s = Effective("""{ "ai": { "enabled": false } }""", """{ "ai": { "enabled": true } }""");
@@ -459,7 +459,7 @@ public class ConfigLoaderTests
         Assert.Equal("https://aoai.example/v1", s.Ai.OpenAi.Endpoint);
     }
 
-    [Fact(Skip = "BUG: same root cause as the protectedPatterns union test - a central denyTerms override replaces the repo file's denyTerms instead of being unioned with them.")]
+    [Fact]
     public void Deny_terms_are_unioned_across_layers_case_insensitively()
     {
         var s = Effective(
@@ -473,7 +473,7 @@ public class ConfigLoaderTests
 
     // ---- Safety rules: bypass attempts ----
 
-    [Fact(Skip = "BUG: StripRepoForbiddenKeys removes keys case-sensitively but JSON binding/merging is case-insensitive, so BranchName / GitIdentity keys in a repo file are applied (branchName and gitIdentity are not reset afterwards).")]
+    [Fact]
     public void Repo_file_cannot_bypass_ignored_keys_by_changing_property_name_casing()
     {
         // JSON binding is case-insensitive, so "BranchName"/"GitIdentity" are the same settings as "branchName"/"gitIdentity".
@@ -510,7 +510,7 @@ public class ConfigLoaderTests
         Assert.Single(s.Guards.ProtectedPatterns, p => string.Equals(p, "**/Security/**", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact(Skip = "BUG: a central override of guards.protectedPatterns REPLACES the default list (only a repo file gets union semantics), contradicting the AgentSettings doc comment 'Union-merged: overrides can add but never remove'.")]
+    [Fact]
     public void Central_override_of_protected_patterns_cannot_remove_defaults()
     {
         var s = Effective(centralJson: """{ "guards": { "protectedPatterns": ["**/Payments/**"] } }""");

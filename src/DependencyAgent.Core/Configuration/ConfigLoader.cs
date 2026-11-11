@@ -92,67 +92,120 @@ public static class ConfigLoader
     /// <summary>Merge layers into effective settings. <paramref name="repoOverrideJson"/> is the content of the repo's override file, if any.</summary>
     public static AgentSettings BuildEffectiveSettings(JsonObject defaults, string? repoOverrideJson, JsonObject? centralOverrides)
     {
-        var central = (JsonObject)defaults.DeepClone();
-        central.Remove("$schema");
+        var defaultsNode = Clean(defaults);
+        var defaultSettings = Deserialize(defaultsNode);
+
+        var centralNode = Clean(defaults);
         if (centralOverrides is not null)
         {
-            DeepMerge(central, (JsonObject)centralOverrides.DeepClone());
+            DeepMerge(centralNode, Clean(centralOverrides));
         }
 
-        var centralSettings = central.Deserialize<AgentSettings>(JsonOptions) ?? new AgentSettings();
+        var central = Deserialize(centralNode);
+
+        // Lists that may only grow: central overrides add to the defaults, never replace them.
+        central.Guards.ProtectedPatterns = Union(defaultSettings.Guards.ProtectedPatterns, central.Guards.ProtectedPatterns);
+        central.Ai.LearnMcp.DenyTerms = Union(defaultSettings.Ai.LearnMcp.DenyTerms, central.Ai.LearnMcp.DenyTerms);
+
         if (string.IsNullOrWhiteSpace(repoOverrideJson))
         {
-            return centralSettings;
+            return central;
         }
 
         var repoNode = ParseObject(repoOverrideJson, RepoOverrideFileName);
-        repoNode.Remove("$schema");
+        RemoveKey(repoNode, "$schema");
         StripRepoForbiddenKeys(repoNode);
 
-        // defaults → repo → central overrides
-        var merged = (JsonObject)defaults.DeepClone();
-        merged.Remove("$schema");
-        DeepMerge(merged, repoNode);
+        // Ordinary settings: defaults → repo file → central overrides (central wins).
+        var mergedNode = Clean(defaults);
+        DeepMerge(mergedNode, (JsonObject)repoNode.DeepClone());
         if (centralOverrides is not null)
         {
-            DeepMerge(merged, (JsonObject)centralOverrides.DeepClone());
+            DeepMerge(mergedNode, Clean(centralOverrides));
         }
 
-        var effective = merged.Deserialize<AgentSettings>(JsonOptions) ?? new AgentSettings();
+        var effective = Deserialize(mergedNode);
 
-        // Safety rules: repo can only tighten.
-        effective.Guards.ProtectedPatterns = centralSettings.Guards.ProtectedPatterns
-            .Concat(effective.Guards.ProtectedPatterns)
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        effective.Guards.MaxChangedFiles = Math.Min(effective.Guards.MaxChangedFiles, centralSettings.Guards.MaxChangedFiles);
-        effective.Guards.MaxChangedLines = Math.Min(effective.Guards.MaxChangedLines, centralSettings.Guards.MaxChangedLines);
-        effective.Ai.Enabled = centralSettings.Ai.Enabled && effective.Ai.Enabled;
-        effective.Ai.Provider = centralSettings.Ai.Provider;
-        effective.Ai.OpenAi = centralSettings.Ai.OpenAi;
-        effective.Ai.Copilot = centralSettings.Ai.Copilot;
-        effective.Ai.LearnMcp.Endpoint = centralSettings.Ai.LearnMcp.Endpoint;
-        effective.Ai.LearnMcp.DenyTerms = centralSettings.Ai.LearnMcp.DenyTerms
-            .Concat(effective.Ai.LearnMcp.DenyTerms).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        effective.Ai.LearnMcp.Enabled = centralSettings.Ai.LearnMcp.Enabled && effective.Ai.LearnMcp.Enabled;
+        // Safety settings: computed from the central value and the repo file explicitly, so the repo can only tighten.
+        effective.Guards.ProtectedPatterns = Union(central.Guards.ProtectedPatterns, GetStrings(repoNode, "guards", "protectedPatterns"));
+        effective.Guards.MaxChangedFiles = Math.Min(central.Guards.MaxChangedFiles, GetInt(repoNode, "guards", "maxChangedFiles") ?? int.MaxValue);
+        effective.Guards.MaxChangedLines = Math.Min(central.Guards.MaxChangedLines, GetInt(repoNode, "guards", "maxChangedLines") ?? int.MaxValue);
+        effective.Ai.Enabled = central.Ai.Enabled && (GetBool(repoNode, "ai", "enabled") ?? true);
+        effective.Ai.LearnMcp.Enabled = central.Ai.LearnMcp.Enabled && (GetBool(repoNode, "ai", "learnMcp", "enabled") ?? true);
+        effective.Ai.LearnMcp.DenyTerms = Union(central.Ai.LearnMcp.DenyTerms, GetStrings(repoNode, "ai", "learnMcp", "denyTerms"));
+
+        // Central-only settings.
+        effective.Ai.Provider = central.Ai.Provider;
+        effective.Ai.OpenAi = central.Ai.OpenAi;
+        effective.Ai.Copilot = central.Ai.Copilot;
+        effective.Ai.LearnMcp.Endpoint = central.Ai.LearnMcp.Endpoint;
+        effective.GitIdentity = central.GitIdentity;
+        effective.BranchName = central.BranchName;
         return effective;
     }
 
+    private static JsonObject Clean(JsonObject node)
+    {
+        var clone = (JsonObject)node.DeepClone();
+        RemoveKey(clone, "$schema");
+        return clone;
+    }
+
+    private static AgentSettings Deserialize(JsonObject node) => node.Deserialize<AgentSettings>(JsonOptions) ?? new AgentSettings();
+
+    private static List<string> Union(IEnumerable<string> first, IEnumerable<string> second) =>
+        first.Concat(second).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
     private static void StripRepoForbiddenKeys(JsonObject repoNode)
     {
-        if (repoNode["ai"] is JsonObject ai)
+        if (GetNode(repoNode, "ai") is JsonObject ai)
         {
-            ai.Remove("provider");
-            ai.Remove("openAi");
-            ai.Remove("copilot");
-            if (ai["learnMcp"] is JsonObject learn)
+            RemoveKey(ai, "provider");
+            RemoveKey(ai, "openAi");
+            RemoveKey(ai, "copilot");
+            if (GetNode(ai, "learnMcp") is JsonObject learn)
             {
-                learn.Remove("endpoint");
+                RemoveKey(learn, "endpoint");
             }
         }
 
-        repoNode.Remove("gitIdentity");
-        repoNode.Remove("branchName");
+        RemoveKey(repoNode, "gitIdentity");
+        RemoveKey(repoNode, "branchName");
     }
+
+    /// <summary>Case-insensitive property lookup (binding is case-insensitive, so every check must be too).</summary>
+    private static JsonNode? GetNode(JsonObject obj, params string[] path)
+    {
+        JsonNode? current = obj;
+        foreach (var segment in path)
+        {
+            if (current is not JsonObject o)
+            {
+                return null;
+            }
+
+            current = o.FirstOrDefault(p => string.Equals(p.Key, segment, StringComparison.OrdinalIgnoreCase)).Value;
+        }
+
+        return current;
+    }
+
+    private static void RemoveKey(JsonObject obj, string key)
+    {
+        foreach (var k in obj.Select(p => p.Key).Where(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            obj.Remove(k);
+        }
+    }
+
+    private static IEnumerable<string> GetStrings(JsonObject obj, params string[] path) =>
+        GetNode(obj, path) is JsonArray arr ? arr.OfType<JsonValue>().Select(v => v.TryGetValue<string>(out var s) ? s : null).OfType<string>() : [];
+
+    private static int? GetInt(JsonObject obj, params string[] path) =>
+        GetNode(obj, path) is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
+
+    private static bool? GetBool(JsonObject obj, params string[] path) =>
+        GetNode(obj, path) is JsonValue v && v.TryGetValue<bool>(out var b) ? b : null;
 
     /// <summary>Objects merge recursively; arrays and scalars in <paramref name="overlay"/> replace those in <paramref name="target"/>.</summary>
     public static void DeepMerge(JsonObject target, JsonObject overlay)
