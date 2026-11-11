@@ -41,8 +41,15 @@ public static class ConfigLoader
         return ParseObject(File.ReadAllText(path), path);
     }
 
-    public static RepositoryInventory LoadInventory(string configDirectory)
+    public const string TeamProjectVariable = "SYSTEM_TEAMPROJECT";
+
+    /// <summary>
+    /// Loads <c>repositories.json</c>. Every repository is in one Azure DevOps project: the top-level <c>project</c>,
+    /// or (when omitted) the pipeline's own project from <c>SYSTEM_TEAMPROJECT</c>.
+    /// </summary>
+    public static RepositoryInventory LoadInventory(string configDirectory, Func<string, string?>? getVariable = null)
     {
+        getVariable ??= Environment.GetEnvironmentVariable;
         var path = Path.Combine(configDirectory, "repositories.json");
         if (!File.Exists(path))
         {
@@ -52,18 +59,34 @@ public static class ConfigLoader
         var node = ParseObject(File.ReadAllText(path), path);
         node.Remove("$schema");
         var inventory = node.Deserialize<RepositoryInventory>(JsonOptions) ?? new RepositoryInventory();
-        var duplicates = inventory.Repositories.GroupBy(r => r.Key, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        var project = string.IsNullOrWhiteSpace(inventory.Project) ? getVariable(TeamProjectVariable) : inventory.Project.Trim();
+        if (inventory.Repositories.Count > 0 && string.IsNullOrWhiteSpace(project))
+        {
+            throw new InvalidOperationException(
+                $"{path}: set the top-level 'project' (the Azure DevOps project that contains all target repositories), or run inside a pipeline where {TeamProjectVariable} is set.");
+        }
+
+        inventory.Project = project;
+        foreach (var repo in inventory.Repositories)
+        {
+            if (string.IsNullOrWhiteSpace(repo.Repository))
+            {
+                throw new InvalidOperationException($"Every entry in {path} needs 'repository'.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(repo.Project) && !string.Equals(repo.Project.Trim(), project, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"{path}: repository '{repo.Repository}' names project '{repo.Project}', but all repositories must be in project '{project}'.");
+            }
+
+            repo.Project = project!;
+        }
+
+        var duplicates = inventory.Repositories.GroupBy(r => r.Repository, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
         if (duplicates.Count > 0)
         {
             throw new InvalidOperationException($"Duplicate repositories in {path}: {string.Join(", ", duplicates)}");
-        }
-
-        foreach (var repo in inventory.Repositories)
-        {
-            if (string.IsNullOrWhiteSpace(repo.Project) || string.IsNullOrWhiteSpace(repo.Repository))
-            {
-                throw new InvalidOperationException($"Every entry in {path} needs 'project' and 'repository'.");
-            }
         }
 
         return inventory;
@@ -133,6 +156,8 @@ public static class ConfigLoader
         effective.Ai.Enabled = central.Ai.Enabled && (GetBool(repoNode, "ai", "enabled") ?? true);
         effective.Ai.LearnMcp.Enabled = central.Ai.LearnMcp.Enabled && (GetBool(repoNode, "ai", "learnMcp", "enabled") ?? true);
         effective.Ai.LearnMcp.DenyTerms = Union(central.Ai.LearnMcp.DenyTerms, GetStrings(repoNode, "ai", "learnMcp", "denyTerms"));
+        effective.Ai.Roslynk = central.Ai.Roslynk;
+        effective.Ai.Roslynk.Enabled = central.Ai.Roslynk.Enabled && (GetBool(repoNode, "ai", "roslynk", "enabled") ?? true);
 
         // Central-only settings.
         effective.Ai.Provider = central.Ai.Provider;
@@ -166,6 +191,15 @@ public static class ConfigLoader
             if (GetNode(ai, "learnMcp") is JsonObject learn)
             {
                 RemoveKey(learn, "endpoint");
+            }
+
+            // Repositories may only switch Roslynk off; command, arguments and permissions are central.
+            if (GetNode(ai, "roslynk") is JsonObject roslynk)
+            {
+                foreach (var key in roslynk.Select(p => p.Key).Where(k => !string.Equals(k, "enabled", StringComparison.OrdinalIgnoreCase)).ToList())
+                {
+                    roslynk.Remove(key);
+                }
             }
         }
 

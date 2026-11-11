@@ -5,7 +5,10 @@ namespace DependencyAgent.Core.Configuration;
 /// <summary>One entry in <c>config/repositories.json</c>.</summary>
 public sealed class RepositoryEntry
 {
-    /// <summary>Azure DevOps project name.</summary>
+    /// <summary>
+    /// Azure DevOps project name. All repositories live in one project: this is filled from the inventory's top-level
+    /// <c>project</c> (or the pipeline's own project); an entry may repeat it but may not name a different one.
+    /// </summary>
     public string Project { get; set; } = "";
 
     /// <summary>Azure DevOps repository name.</summary>
@@ -33,5 +36,8 @@ public sealed class RepositoryEntry
 
 public sealed class RepositoryInventory
 {
+    /// <summary>The single Azure DevOps project containing every target repository. Null = the pipeline's project (<c>SYSTEM_TEAMPROJECT</c>).</summary>
+    public string? Project { get; set; }
+
     public List<RepositoryEntry> Repositories { get; set; } = [];
 }

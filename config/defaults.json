@@ -35,7 +35,14 @@
   "guards": {
     "maxChangedFiles": 40,
     "maxChangedLines": 1500,
-    "allowedEditPatterns": ["**/*.cs", "**/*.csproj", "**/*.props", "**/*.targets", "**/*.razor", "**/*.cshtml"],
+    "allowedEditPatterns": [
+      "**/*.cs",
+      "**/*.csproj",
+      "**/*.props",
+      "**/*.targets",
+      "**/*.razor",
+      "**/*.cshtml"
+    ],
     "protectedPatterns": [
       ".git/**",
       "**/Authentication/**",
@@ -58,29 +65,44 @@
     "enabled": true,
     "provider": "copilot",
     "model": null,
+    "reasoningEffort": null,
     "maxIterations": 3,
     "timeoutMinutes": 20,
     "copilot": {
       "executable": "copilot",
-      "tokenVariable": "COPILOT_GITHUB_TOKEN"
+      "tokenVariable": "COPILOT_GITHUB_TOKEN",
+      "model": "claude-sonnet-5.5",
+      "reasoningEffort": "high"
     },
     "openAi": {
       "endpoint": null,
       "apiKeyVariable": "OPENAI_API_KEY",
       "defaultModel": "gpt-5.1",
-      "maxToolTurns": 40
+      "maxToolTurns": 40,
+      "reasoningEffort": null
     },
     "learnMcp": {
       "enabled": true,
       "endpoint": "https://learn.microsoft.com/api/mcp",
       "maxQueryLength": 200,
       "denyTerms": []
+    },
+    "roslynk": {
+      "enabled": true,
+      "command": "roslynk",
+      "arguments": [
+        "stdio"
+      ],
+      "serverName": "roslynk",
+      "allowWriteTools": true
     }
   },
   "pullRequest": {
     "titlePrefix": "[dependency-agent]",
     "reviewers": [],
     "workItemIds": [],
-    "labels": ["dependency-agent"]
+    "labels": [
+      "dependency-agent"
+    ]
   }
 }

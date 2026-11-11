@@ -138,6 +138,15 @@ public sealed class AiRunRequest
     /// <summary>Command + args that start the sanitizing Learn MCP proxy over stdio (null = docs lookups disabled).</summary>
     public IReadOnlyList<string>? LearnProxyCommand { get; init; }
 
+    /// <summary>Command + args that start the Roslynk MCP server over stdio (null = Roslyn tools disabled).</summary>
+    public IReadOnlyList<string>? RoslynkCommand { get; init; }
+
+    /// <summary>Absolute path of the .sln/.slnx the AI should open with Roslynk (may be a generated solution outside the repo).</summary>
+    public string? SolutionPath { get; init; }
+
+    /// <summary>Reasoning effort to request (none … max). Null = provider default.</summary>
+    public string? ReasoningEffort { get; init; }
+
     /// <summary>In-process docs client for providers that implement their own tool loop (null = disabled).</summary>
     public ILearnDocsClient? LearnDocs { get; init; }
 

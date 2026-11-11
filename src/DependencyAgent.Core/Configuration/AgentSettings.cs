@@ -147,8 +147,11 @@ public sealed class AiSettings
     /// <summary><c>copilot</c>, <c>openai</c> or <c>none</c>.</summary>
     public string Provider { get; set; } = "copilot";
 
-    /// <summary>Model name. Null = provider default.</summary>
+    /// <summary>Model name for any provider. Null = the provider's default (<c>ai.copilot.model</c> / <c>ai.openAi.defaultModel</c>).</summary>
     public string? Model { get; set; }
+
+    /// <summary>Reasoning effort for any provider (none, minimal, low, medium, high, xhigh, max). Null = the provider's default.</summary>
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>Max build→fix iterations.</summary>
     public int MaxIterations { get; set; } = 3;
@@ -161,6 +164,8 @@ public sealed class AiSettings
     public CopilotSettings Copilot { get; set; } = new();
 
     public LearnMcpSettings LearnMcp { get; set; } = new();
+
+    public RoslynkSettings Roslynk { get; set; } = new();
 }
 
 public sealed class OpenAiSettings
@@ -173,6 +178,9 @@ public sealed class OpenAiSettings
 
     public string DefaultModel { get; set; } = "gpt-5.1";
 
+    /// <summary>Default reasoning effort for OpenAI reasoning models (low, medium, high). Null = model default.</summary>
+    public string? ReasoningEffort { get; set; }
+
     /// <summary>Max tool-calling turns per iteration.</summary>
     public int MaxToolTurns { get; set; } = 40;
 }
@@ -184,6 +192,34 @@ public sealed class CopilotSettings
 
     /// <summary>Environment variable holding the GitHub token tied to a Copilot-licensed user.</summary>
     public string TokenVariable { get; set; } = "COPILOT_GITHUB_TOKEN";
+
+    /// <summary>Default Copilot model id (Claude Sonnet 5.5).</summary>
+    public string Model { get; set; } = "claude-sonnet-5.5";
+
+    /// <summary>Default reasoning effort passed as <c>--reasoning-effort</c>.</summary>
+    public string? ReasoningEffort { get; set; } = "high";
+}
+
+/// <summary>
+/// Roslynk (https://github.com/mrpmorris/Roslynk, MIT): a local Roslyn MCP server giving the AI compiler diagnostics,
+/// symbol navigation, references and Roslyn code fixes/refactorings. It listens on loopback only.
+/// </summary>
+public sealed class RoslynkSettings
+{
+    /// <summary>Offer Roslynk tools to the AI. Repository override files can only turn this off.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Executable of the installed .NET tool (pipeline: <c>dotnet tool install --global Roslynk --version 3.0.0</c>).</summary>
+    public string Command { get; set; } = "roslynk";
+
+    /// <summary>Arguments; the trailing <c>stdio</c> verb is required (without it the tool starts as an HTTP daemon).</summary>
+    public List<string> Arguments { get; set; } = ["stdio"];
+
+    /// <summary>MCP server name exposed to the AI (tool permission prefix).</summary>
+    public string ServerName { get; set; } = "roslynk";
+
+    /// <summary>Allow Roslynk write tools (apply_code_fix, apply_code_action, apply_patch, rename_symbol, …). Edits are still subject to the guards.</summary>
+    public bool AllowWriteTools { get; set; } = true;
 }
 
 public sealed class LearnMcpSettings
