@@ -8,4 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="../DependencyAgent.Core/DependencyAgent.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="DependencyAgent.Fixing.Tests" />
+  </ItemGroup>
 </Project>
