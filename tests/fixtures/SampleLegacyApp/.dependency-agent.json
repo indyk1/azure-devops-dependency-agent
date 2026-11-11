@@ -1,0 +1,14 @@
+{
+  "$schema": "../../../schemas/repo-override.schema.json",
+  // Example per-repository override. Repositories can only tighten the central policy.
+  "guards": {
+    "maxChangedFiles": 10,
+    "protectedPatterns": ["**/Legacy/**"]
+  },
+  "verification": {
+    "testArguments": ["--filter", "Category!=Integration"]
+  },
+  "ai": {
+    "learnMcp": { "denyTerms": ["SampleLegacyApp"] }
+  }
+}

@@ -10,6 +10,9 @@
     <PackageReference Include="xunit.runner.visualstudio" />
   </ItemGroup>
   <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/DependencyAgent.Core/DependencyAgent.Core.csproj" />
   </ItemGroup>
 </Project>

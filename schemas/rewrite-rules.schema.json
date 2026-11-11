@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dependency Agent rewrite rules",
+  "description": "Declarative regex rewrite rules (config/rewrite-rules.json). A rule runs when one of its diagnostics appears in the failing build, and only on files that diagnostic points at.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "rules"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "diagnostics",
+          "filePattern",
+          "find",
+          "replace"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Unique rule id."
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true,
+            "description": "Disabled rules are never applied."
+          },
+          "description": {
+            "type": "string",
+            "description": "What the rule does and why."
+          },
+          "diagnostics": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z]+[0-9]+$"
+            },
+            "description": "Diagnostic ids (e.g. SYSLIB0060, CS0618) that trigger the rule."
+          },
+          "filePattern": {
+            "type": "string",
+            "default": "**/*.cs",
+            "description": "Glob (repo-relative) of files the rule may edit."
+          },
+          "find": {
+            "type": "string",
+            "minLength": 1,
+            "description": ".NET regular expression to find."
+          },
+          "replace": {
+            "type": "string",
+            "description": "Replacement text; may use $1-style group references."
+          },
+          "docs": {
+            "type": "string",
+            "description": "URL of the documentation describing the replacement (included in the PR report)."
+          }
+        }
+      }
+    }
+  }
+}
