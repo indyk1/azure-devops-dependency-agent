@@ -156,7 +156,7 @@ A team can put this file at the root of its repository. It can only make the age
 
 `defaults.json` -> repo `.dependency-agent.json` -> central `overrides` in `repositories.json` (highest). Objects merge recursively; arrays and scalars replace. The safety rules above are then applied so a repository file can never loosen a central control.
 
-Known limitation (the 0.1.0 merge code): an explicit central override of `guards.maxChangedFiles`, `guards.maxChangedLines`, `ai.enabled`, `ai.learnMcp.enabled`, `guards.protectedPatterns` or `ai.learnMcp.denyTerms` is merged last, so it masks the repo file's stricter value for that key. Set those centrally in `defaults.json` rather than in `overrides` if the repository file must be able to tighten them. Property names are matched case-insensitively when merging, but the "ignored keys" list is applied case-sensitively: write them in camelCase and review repository files accordingly.
+Safety settings are computed explicitly rather than by plain merging, so a central `overrides` block cannot mask a repository's stricter value: `guards.protectedPatterns` and `ai.learnMcp.denyTerms` are the union of `defaults.json`, central `overrides` and the repo file (a central override adds to the defaults, it never replaces them); `guards.maxChangedFiles`/`maxChangedLines` take the lower of the central value and the repo file; `ai.enabled`/`ai.learnMcp.enabled` are the central value AND the repo file. All key matching, including the "ignored keys" list, is case-insensitive.
 
 ## Package policy examples
 

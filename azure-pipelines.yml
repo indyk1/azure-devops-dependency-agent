@@ -74,7 +74,9 @@ stages:
               packageType: sdk
               useGlobalJson: true
           - script: dotnet test DependencyAgent.slnx -c Release
-            displayName: Test
+            displayName: Test (unit + end-to-end upgrade of tests/fixtures/SampleLegacyApp)
+            env:
+              DEPENDENCY_AGENT_E2E: '1' # real restore/build/test of the fixture repo; needs the .NET 8 SDK above + nuget.org
           - script: dotnet publish src/DependencyAgent.Cli -c Release -o "$(Build.ArtifactStagingDirectory)/tool"
             displayName: Publish tool (framework-dependent)
           - publish: $(Build.ArtifactStagingDirectory)/tool

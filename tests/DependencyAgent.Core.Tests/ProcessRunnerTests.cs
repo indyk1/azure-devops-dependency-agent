@@ -258,3 +258,35 @@ public class ProcessRunnerTests
         };
     }
 }
+
+public sealed class InheritedToolingVariableTests
+{
+    [Theory]
+    [InlineData("MSBuildSDKsPath", true)]
+    [InlineData("MSBUILD_EXE_PATH", true)]
+    [InlineData("MSBuildExtensionsPath", true)]
+    [InlineData("VSTEST_HOST_DEBUG", true)]
+    [InlineData("DOTNET_HOST_PATH", true)]
+    [InlineData("DOTNET_ROOT", false)]
+    [InlineData("PATH", false)]
+    public void Classifies(string name, bool expected) =>
+        Assert.Equal(expected, DependencyAgent.Core.Processes.ProcessRunner.IsInheritedToolingVariable(name));
+
+    [Fact]
+    public void ApplyEnvironment_RemovesParentMsBuildVariables_ButKeepsExplicitOverrides()
+    {
+        var env = new Dictionary<string, string?> { ["MSBuildSDKsPath"] = "/sdk/10/Sdks", ["PATH"] = "/usr/bin" };
+        var spec = new DependencyAgent.Core.Processes.ProcessSpec
+        {
+            FileName = "dotnet",
+            WorkingDirectory = "/",
+            Environment = new Dictionary<string, string?> { ["MSBUILDDISABLENODEREUSE"] = "1" },
+        };
+
+        DependencyAgent.Core.Processes.ProcessRunner.ApplyEnvironment(env, spec);
+
+        Assert.False(env.ContainsKey("MSBuildSDKsPath"));
+        Assert.Equal("/usr/bin", env["PATH"]);
+        Assert.Equal("1", env["MSBUILDDISABLENODEREUSE"]);
+    }
+}

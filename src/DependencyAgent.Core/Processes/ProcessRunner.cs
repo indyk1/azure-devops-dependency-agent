@@ -211,6 +211,14 @@ public sealed class ProcessRunner : IProcessRunner
             }
         }
 
+        // A parent dotnet/MSBuild/test host (the agent itself, or `dotnet test`) exports variables such as MSBuildSDKsPath
+        // that pin child builds to the parent's SDK. A target repo whose global.json selects another SDK would then load
+        // mismatched build tasks, so children must resolve their own SDK.
+        foreach (var key in environment.Keys.Where(IsInheritedToolingVariable).ToList())
+        {
+            environment.Remove(key);
+        }
+
         environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         environment["DOTNET_NOLOGO"] = "1";
         environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
@@ -228,6 +236,14 @@ public sealed class ProcessRunner : IProcessRunner
             }
         }
     }
+
+    /// <summary>MSBuild / test-host variables inherited from a parent dotnet process that must not leak into child builds.</summary>
+    public static bool IsInheritedToolingVariable(string name) =>
+        name.StartsWith("MSBuild", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("VSTEST_", StringComparison.OrdinalIgnoreCase)
+        || name.StartsWith("TESTINGPLATFORM_", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("DOTNET_HOST_PATH", StringComparison.OrdinalIgnoreCase)
+        || name.Equals("DOTNET_CLI_UI_LANGUAGE", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Current process environment snapshot (for tests / callers that need to inspect it).</summary>
     public static Dictionary<string, string?> CurrentEnvironment()

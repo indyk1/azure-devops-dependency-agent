@@ -108,7 +108,9 @@ public sealed class RepoUpgradeOrchestrator(OrchestratorServices services)
         var baselineReliable = baseline.Succeeded;
         if (!baselineReliable)
         {
-            report.Notes.Add($"Baseline build (before any change) did not succeed at stage {baseline.Stage}; the new-warnings gate is informational only for this run.");
+            var firstErrors = string.Join("; ", baseline.Errors.Take(3).Select(e => $"{e.Code} {e.File}: {e.Message}"));
+            report.Notes.Add($"Baseline build (before any change) did not succeed at stage {baseline.Stage}; the new-warnings gate is informational only for this run."
+                + (firstErrors.Length > 0 ? $" First errors: {firstErrors}" : ""));
         }
 
         // 2. Deterministic updates.
