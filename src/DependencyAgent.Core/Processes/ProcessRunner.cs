@@ -43,6 +43,16 @@ public static class SecretEnvironment
 
     private static readonly string[] SecretLikeSuffixes = ["TOKEN", "_PAT", "_KEY", "SECRET", "PASSWORD", "PASSWD", "_PWD", "CONNECTIONSTRING", "CREDENTIALS"];
 
+    /// <summary>
+    /// Reads a secret from the environment. Returns null when unset, empty, or an unexpanded Azure Pipelines
+    /// macro such as <c>$(OPENAI_API_KEY)</c> (what a pipeline passes when the variable is not defined).
+    /// </summary>
+    public static string? GetSecret(string name)
+    {
+        var value = System.Environment.GetEnvironmentVariable(name);
+        return string.IsNullOrWhiteSpace(value) || value.StartsWith("$(", StringComparison.Ordinal) ? null : value;
+    }
+
     /// <summary>True if the variable name is (or looks like) a credential.</summary>
     public static bool IsSecret(string name) =>
         AzureDevOpsVariables.Contains(name) || NuGetVariables.Contains(name) || AiVariables.Contains(name)

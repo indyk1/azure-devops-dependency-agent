@@ -109,7 +109,9 @@ public sealed record GuardResult(bool Passed, IReadOnlyList<string> Violations, 
 /// <summary>Input for a code fixer iteration.</summary>
 /// <param name="FailedVerification">The latest failing build or test result.</param>
 /// <param name="NewWarnings">Warnings not present in the baseline build (fixers should try to resolve these too).</param>
-public sealed record FixRequest(VerificationResult FailedVerification, IReadOnlyList<BuildDiagnostic> NewWarnings, int Iteration);
+/// <param name="PriorChanges">Deterministic changes already applied this run (TFM, packages, SDK, Docker) — context for fixers.</param>
+/// <param name="Iteration">1-based fix iteration.</param>
+public sealed record FixRequest(VerificationResult FailedVerification, IReadOnlyList<BuildDiagnostic> NewWarnings, IReadOnlyList<ChangeRecord> PriorChanges, int Iteration);
 
 public sealed record FixResult(bool MadeChanges, IReadOnlyList<ChangeRecord> Changes, IReadOnlyList<string> Notes)
 {
