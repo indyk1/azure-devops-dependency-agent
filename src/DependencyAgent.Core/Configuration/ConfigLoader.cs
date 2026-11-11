@@ -186,6 +186,8 @@ public static class ConfigLoader
         if (GetNode(repoNode, "ai") is JsonObject ai)
         {
             RemoveKey(ai, "provider");
+            RemoveKey(ai, "model");
+            RemoveKey(ai, "reasoningEffort");
             RemoveKey(ai, "openAi");
             RemoveKey(ai, "copilot");
             if (GetNode(ai, "learnMcp") is JsonObject learn)

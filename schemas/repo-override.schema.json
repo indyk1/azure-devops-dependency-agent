@@ -294,7 +294,7 @@
             "string",
             "null"
           ],
-          "description": "Model name for any provider. Null = the provider's default (ai.copilot.model / ai.openAi.defaultModel).",
+          "description": "IGNORED in a repository file: the model is controlled centrally (config/defaults.json or the central overrides).",
           "default": null
         },
         "reasoningEffort": {
@@ -312,7 +312,7 @@
             "max",
             null
           ],
-          "description": "Reasoning effort for any provider (none, minimal, low, medium, high, xhigh, max). Null = the provider's default (ai.copilot.reasoningEffort / ai.openAi.reasoningEffort).",
+          "description": "IGNORED in a repository file: reasoning effort is controlled centrally.",
           "default": null
         },
         "maxIterations": {

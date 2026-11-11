@@ -526,8 +526,8 @@ public class ConfigLoaderTests
         Assert.Equal("copilot", s.Ai.Copilot.Executable);
         Assert.Equal("COPILOT_GITHUB_TOKEN", s.Ai.Copilot.TokenVariable);
         Assert.Equal("https://learn.microsoft.com/api/mcp", s.Ai.LearnMcp.Endpoint);
-        // Non-sensitive AI keys are still honoured.
-        Assert.Equal("my-model", s.Ai.Model);
+        // Model (and reasoning effort) are central-only as well.
+        Assert.Null(s.Ai.Model);
     }
 
     [Fact]
@@ -609,5 +609,35 @@ public class ConfigLoaderTests
         var s = Effective(centralJson: """{ "guards": { "protectedPatterns": ["**/Payments/**"] } }""");
         Assert.Contains("**/Payments/**", s.Guards.ProtectedPatterns);
         Assert.Contains("**/Security/**", s.Guards.ProtectedPatterns);
+    }
+}
+
+public sealed class RepoOverrideModelLockTests
+{
+    [Fact]
+    public void RepoFile_cannot_change_model_or_reasoning_effort()
+    {
+        var defaults = (System.Text.Json.Nodes.JsonObject)System.Text.Json.JsonSerializer.SerializeToNode(
+            new DependencyAgent.Core.Configuration.AgentSettings(), DependencyAgent.Core.Configuration.ConfigLoader.JsonOptions)!;
+
+        var effective = DependencyAgent.Core.Configuration.ConfigLoader.BuildEffectiveSettings(
+            defaults, """{ "AI": { "Model": "cheap-model", "ReasoningEffort": "low" } }""", null);
+
+        Assert.Null(effective.Ai.Model);
+        Assert.Null(effective.Ai.ReasoningEffort);
+        Assert.Equal("claude-sonnet-5.5", effective.Ai.Copilot.Model);
+        Assert.Equal("high", effective.Ai.Copilot.ReasoningEffort);
+    }
+
+    [Fact]
+    public void CentralOverride_can_still_change_model()
+    {
+        var defaults = (System.Text.Json.Nodes.JsonObject)System.Text.Json.JsonSerializer.SerializeToNode(
+            new DependencyAgent.Core.Configuration.AgentSettings(), DependencyAgent.Core.Configuration.ConfigLoader.JsonOptions)!;
+
+        var effective = DependencyAgent.Core.Configuration.ConfigLoader.BuildEffectiveSettings(
+            defaults, """{ "ai": { "model": "x" } }""", System.Text.Json.Nodes.JsonNode.Parse("""{ "ai": { "model": "claude-opus-5.5" } }""")!.AsObject());
+
+        Assert.Equal("claude-opus-5.5", effective.Ai.Model);
     }
 }

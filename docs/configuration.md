@@ -165,8 +165,8 @@ A team can put this file at the root of its repository. It can only make the age
 | `ai.learnMcp.enabled` | Can only turn lookups off. |
 | `ai.learnMcp.denyTerms` | Unioned with the central terms. |
 | `ai.roslynk.enabled` | Can only turn Roslynk off. Other `ai.roslynk.*` keys (`command`, `arguments`, `serverName`, `allowWriteTools`) are ignored. |
-| `packages.*`, `docker.*`, `verification.*`, `ruleFixes.*`, `pullRequest.*`, `ai.model`, `ai.reasoningEffort`, `ai.maxIterations`, `ai.timeoutMinutes`, `guards.allowedEditPatterns`, `guards.budgetExcludePatterns` | Override the defaults. |
-| `ai.provider`, `ai.openAi`, `ai.copilot` (including model and reasoning effort), `ai.learnMcp.endpoint`, `gitIdentity`, `branchName` | **Ignored.** Credentials, endpoints and identity are controlled centrally only. |
+| `packages.*`, `docker.*`, `verification.*`, `ruleFixes.*`, `pullRequest.*`, `ai.maxIterations`, `ai.timeoutMinutes`, `guards.allowedEditPatterns`, `guards.budgetExcludePatterns` | Override the defaults. |
+| `ai.provider`, `ai.model`, `ai.reasoningEffort`, `ai.openAi`, `ai.copilot` (including model and reasoning effort), `ai.learnMcp.endpoint`, `gitIdentity`, `branchName` | **Ignored.** Provider, model, effort, credentials, endpoints and identity are controlled centrally only (a central `overrides` block can still change them per repository). |
 
 ### Precedence
 
