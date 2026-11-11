@@ -1,3 +1,4 @@
+#pragma warning disable OPENAI001 // ReasoningEffortLevel is marked experimental in OpenAI 2.15; isolated to this file.
 using System.ClientModel;
 using OpenAI;
 using OpenAI.Chat;
@@ -11,9 +12,11 @@ namespace DependencyAgent.Fixing.OpenAi;
 public sealed class OpenAiChatBackend : IChatBackend
 {
     private readonly ChatClient _client;
+    private readonly string? _reasoningEffort;
 
-    public OpenAiChatBackend(string model, string apiKey, string? endpoint)
+    public OpenAiChatBackend(string model, string apiKey, string? endpoint, string? reasoningEffort = null)
     {
+        _reasoningEffort = reasoningEffort;
         var options = new OpenAIClientOptions();
         if (!string.IsNullOrWhiteSpace(endpoint))
         {
@@ -56,6 +59,11 @@ public sealed class OpenAiChatBackend : IChatBackend
         }
 
         var options = new ChatCompletionOptions();
+        if (MapReasoningEffort(_reasoningEffort) is { } effort)
+        {
+            options.ReasoningEffortLevel = effort;
+        }
+
         foreach (var t in tools)
         {
             options.Tools.Add(ChatTool.CreateFunctionTool(t.Name, t.Description, BinaryData.FromString(t.ParametersJsonSchema)));
@@ -72,6 +80,19 @@ public sealed class OpenAiChatBackend : IChatBackend
         }
 
         return new ChatTurn(TextOf(completion), [], completion.FinishReason == ChatFinishReason.Length);
+    }
+
+    /// <summary>Maps minimal/low/medium/high to the SDK level; anything else (including null) yields null = omit.</summary>
+    public static ChatReasoningEffortLevel? MapReasoningEffort(string? effort)
+    {
+        switch (effort?.Trim().ToLowerInvariant())
+        {
+            case "minimal": return ChatReasoningEffortLevel.Minimal;
+            case "low": return ChatReasoningEffortLevel.Low;
+            case "medium": return ChatReasoningEffortLevel.Medium;
+            case "high": return ChatReasoningEffortLevel.High;
+            default: return null;
+        }
     }
 
     private static string? TextOf(ChatCompletion completion) =>

@@ -51,6 +51,13 @@ public sealed class CopilotCliProvider : IAiProvider
         "COPILOT_ASSISTED_APPROVAL", "COPILOT_BASH_PATH", "BASH_ENV",
     ];
 
+    private static readonly string[] OtelVariables =
+    [
+        "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+        "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS", "OTEL_EXPORTER_OTLP_PROTOCOL",
+        "OTEL_TRACES_EXPORTER", "OTEL_METRICS_EXPORTER", "OTEL_LOGS_EXPORTER", "OTEL_SDK_DISABLED",
+    ];
+
     private readonly IProcessRunner _runner;
 
     public CopilotCliProvider(IProcessRunner runner) => _runner = runner;
@@ -144,11 +151,16 @@ public sealed class CopilotCliProvider : IAiProvider
             "--log-dir=" + Path.Combine(configDir, "logs"),
         };
 
-        var model = request.Model ?? settings.Ai.Model;
-        if (!string.IsNullOrWhiteSpace(model))
+        var model = AiRunDefaults.EffectiveModel("copilot", request, settings);
+        args.Add("--model");
+        args.Add(model);
+
+        // Invalid levels are ignored here; AiFixer reports a note for them.
+        var (effort, _) = AiRunDefaults.ValidateEffort("copilot", AiRunDefaults.RequestedEffort("copilot", request, settings));
+        if (effort is not null)
         {
-            args.Add("--model");
-            args.Add(model);
+            args.Add("--reasoning-effort");
+            args.Add(effort);
         }
 
         foreach (var tool in AvailableFileTools)
@@ -167,8 +179,30 @@ public sealed class CopilotCliProvider : IAiProvider
         {
             args.Add("--available-tools=" + LearnServerName);
             args.Add("--allow-tool=" + LearnServerName);
+        }
+
+        var roslynk = settings.Ai.Roslynk;
+        var hasRoslynk = roslynk.Enabled && request.RoslynkCommand is { Count: > 0 };
+        if (hasRoslynk)
+        {
+            args.Add("--available-tools=" + roslynk.ServerName);
+            args.Add("--allow-tool=" + roslynk.ServerName);
+            if (!roslynk.AllowWriteTools)
+            {
+                // Deny wins over allow: "server(tool)" denies exactly one MCP tool (copilot --help: --deny-tool='MyMCP(denied_tool)').
+                foreach (var tool in RoslynkTools.WriteTools)
+                {
+                    args.Add($"--deny-tool={roslynk.ServerName}({tool})");
+                }
+            }
+        }
+
+        if (hasLearn || hasRoslynk)
+        {
             args.Add("--additional-mcp-config");
-            args.Add(BuildMcpConfig(request.LearnProxyCommand!));
+            args.Add(BuildMcpConfig(
+                hasLearn ? request.LearnProxyCommand : null,
+                hasRoslynk ? (roslynk.ServerName, request.RoslynkCommand!) : null));
         }
 
         // Keep the token out of any MCP server process environment too.
@@ -193,6 +227,17 @@ public sealed class CopilotCliProvider : IAiProvider
             ["COPILOT_DISABLE_DESKTOP_NOTIFICATIONS"] = "1",
             ["NO_COLOR"] = "1",
         };
+        // Roslynk (like any child) must not export telemetry: drop every OpenTelemetry variable inherited from the pipeline.
+        foreach (var name in ProcessRunner.CurrentEnvironment().Keys.Where(n => n.StartsWith("OTEL_", StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            env[name] = null;
+        }
+
+        foreach (var otel in OtelVariables)
+        {
+            env[otel] = null;
+        }
+
         foreach (var blocked in BlockedVariables)
         {
             if (!blocked.Equals(CopilotTokenEnvironmentVariable, StringComparison.Ordinal))
@@ -215,19 +260,34 @@ public sealed class CopilotCliProvider : IAiProvider
     }
 
     /// <summary>MCP config containing only the Learn proxy as a stdio ("local") server.</summary>
-    public static string BuildMcpConfig(IReadOnlyList<string> proxyCommand)
+    public static string BuildMcpConfig(IReadOnlyList<string> proxyCommand) => BuildMcpConfig(proxyCommand, null);
+
+    /// <summary>MCP config with the Learn proxy and/or the Roslynk server as stdio ("local") servers.</summary>
+    public static string BuildMcpConfig(IReadOnlyList<string>? learnCommand, (string Name, IReadOnlyList<string> Command)? roslynk)
     {
-        var server = new JsonObject
+        var servers = new JsonObject();
+        if (learnCommand is { Count: > 0 })
         {
-            ["type"] = "local",
-            ["command"] = proxyCommand[0],
-            ["args"] = new JsonArray(proxyCommand.Skip(1).Select(a => (JsonNode?)JsonValue.Create(a)).ToArray()),
-            ["env"] = new JsonObject(),
-            ["tools"] = new JsonArray("*"),
-        };
-        var root = new JsonObject { ["mcpServers"] = new JsonObject { [LearnServerName] = server } };
+            servers[LearnServerName] = LocalServer(learnCommand);
+        }
+
+        if (roslynk is { } r)
+        {
+            servers[r.Name] = LocalServer(r.Command);
+        }
+
+        var root = new JsonObject { ["mcpServers"] = servers };
         return root.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
     }
+
+    private static JsonObject LocalServer(IReadOnlyList<string> command) => new()
+    {
+        ["type"] = "local",
+        ["command"] = command[0],
+        ["args"] = new JsonArray(command.Skip(1).Select(a => (JsonNode?)JsonValue.Create(a)).ToArray()),
+        ["env"] = new JsonObject(),
+        ["tools"] = new JsonArray("*"),
+    };
 
     private static string Mask(string text, string token) => text.Replace(token, "***", StringComparison.Ordinal);
 }

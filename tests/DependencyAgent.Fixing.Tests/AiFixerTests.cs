@@ -301,6 +301,46 @@ public class AiFixerTests : IDisposable
         Assert.True(summary.Length <= "AI summary: ".Length + AiFixer.MaxSummaryChars);
     }
 
+    [Fact]
+    public async Task Roslynk_GetsSolutionPathModelEffortAndNotes()
+    {
+        _repo.Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        AiRunRequest? seen = null;
+        _provider.OnRun = req => { seen = req; return new AiRunResult(true, "", null); };
+
+        var result = await Fixer().FixAsync(Context(s =>
+        {
+            s.Ai.Roslynk.Command = "sh"; // any executable that exists on PATH
+            s.Ai.ReasoningEffort = "low";
+        }), Request(), TestContext.Current.CancellationToken);
+
+        Assert.NotNull(seen);
+        Assert.Equal(["sh", "stdio"], seen!.RoslynkCommand);
+        Assert.EndsWith(".slnx", seen.SolutionPath);
+        Assert.False(seen.SolutionPath!.StartsWith(_repo.Path, StringComparison.Ordinal));
+        Assert.Equal("low", seen.ReasoningEffort);
+        Assert.Equal("claude-sonnet-5.5", seen.Model);
+        Assert.Contains("roslynk", seen.SystemPrompt);
+        Assert.Contains(result.Notes, n => n.StartsWith("AI tools: roslynk", StringComparison.Ordinal) && n.Contains("claude-sonnet-5.5") && n.Contains("reasoning effort low"));
+        Assert.False(File.Exists(seen.SolutionPath)); // temp dir cleaned up
+    }
+
+    [Fact]
+    public async Task Roslynk_Disabled_OrCommandMissing_IsNotRequested()
+    {
+        _repo.Write("src/App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        AiRunRequest? seen = null;
+        _provider.OnRun = req => { seen = req; return new AiRunResult(true, "", null); };
+
+        await Fixer().FixAsync(Context(s => s.Ai.Roslynk.Enabled = false), Request(), TestContext.Current.CancellationToken);
+        Assert.Null(seen!.RoslynkCommand);
+        Assert.Null(seen.SolutionPath);
+
+        var result = await Fixer().FixAsync(Context(s => s.Ai.Roslynk.Command = "definitely-not-installed-roslynk"), Request(), TestContext.Current.CancellationToken);
+        Assert.Null(seen.RoslynkCommand);
+        Assert.Contains(result.Notes, n => n.Contains("definitely-not-installed-roslynk") && n.Contains("not found"));
+    }
+
     private sealed class FakeProvider : IAiProvider
     {
         public Func<AiRunRequest, AiRunResult> OnRun { get; set; } = _ => new AiRunResult(true, "", null);
