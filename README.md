@@ -74,6 +74,29 @@ dotnet test DependencyAgent.slnx
 
 The CLI reads `config/` and writes reports to `out/`; see [docs/how-it-works.md](docs/how-it-works.md) for what a run produces.
 
+## Running the tool locally
+
+```bash
+dotnet build DependencyAgent.slnx
+dotnet test DependencyAgent.slnx                       # unit tests
+DEPENDENCY_AGENT_E2E=1 dotnet test DependencyAgent.slnx # + end-to-end upgrade of tests/fixtures/SampleLegacyApp (.NET 8 + 10 SDKs)
+
+cli="dotnet run --project src/DependencyAgent.Cli --"
+$cli validate-config --config config
+$cli plan --config config --filter "ring:pilot"
+# Dry run against a real repository: clones, upgrades, fixes and verifies locally; never pushes or touches PRs.
+SYSTEM_COLLECTIONURI=https://dev.azure.com/<org>/ AZURE_DEVOPS_TOKEN=<pat with Code (Read)> \
+  $cli run --config config --repository "<Project>/<Repo>" --dry-run --ai-provider none --output out
+```
+
+| Command | Purpose |
+|---|---|
+| `plan --config <dir> [--filter <f>]` | Validate config, select repositories, emit the pipeline matrix (`matrix`, `repoCount` output variables). |
+| `run --config <dir> --repository <Project/Repo> [--output <dir>] [--work-dir <dir>] [--dry-run] [--ai-provider config\|copilot\|openai\|none] [--collection-uri <url>]` | Process one repository. Exit 0 = up to date / green / draft / skipped, 1 = agent failure. Writes `<output>/<project>__<repo>.json` and `.md` (+ `.learn-audit.jsonl` when docs were queried). |
+| `report --input <dir> [--output <file.md>]` | Merge per-repository reports into a run summary (uploaded to the run when `TF_BUILD` is set). |
+| `validate-config --config <dir>` | Semantic checks of `defaults.json`, `repositories.json` and every `overrides` block. |
+| `learn-proxy [...]` | The sanitising stdio MCP proxy to Microsoft Learn; started by the AI fixer, not by hand. |
+
 ## Repository layout
 
 ```
