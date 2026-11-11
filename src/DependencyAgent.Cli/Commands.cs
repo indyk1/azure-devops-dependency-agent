@@ -16,6 +16,8 @@ public static partial class Commands
 
     private static readonly string[] KnownProviders = ["copilot", "openai", "none"];
 
+    private static readonly string[] ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
     private static bool InPipeline => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("TF_BUILD"));
 
     public static int Help(TextWriter output)
@@ -26,7 +28,7 @@ public static partial class Commands
             Commands:
               plan             --config <dir> [--filter <filter>]
                                Select repositories and emit the pipeline matrix (output variables 'matrix', 'repoCount').
-              run              --config <dir> --repository <Project/Repo> [--output <dir>] [--work-dir <dir>]
+              run              --config <dir> --repository <Repo|Project/Repo> [--output <dir>] [--work-dir <dir>]
                                [--dry-run] [--ai-provider config|copilot|openai|none] [--collection-uri <url>]
                                Process one repository. Exit 0 = up to date / green / draft / skipped, 1 = failed.
               report           --input <dir> [--output <file.md>]
@@ -35,7 +37,11 @@ public static partial class Commands
               learn-proxy      [--endpoint <url>] [--max-query-length <n>] [--deny-terms-file <path>] [--audit-log <path>]
                                Sanitising stdio MCP proxy to Microsoft Learn (used by AI providers).
 
-            Filter: '*' (default), comma-separated 'Project/Repo', 'Repo', globs, or 'ring:<name>'.
+            All target repositories live in one Azure DevOps project: the top-level 'project' of repositories.json,
+            or the pipeline's own project (SYSTEM_TEAMPROJECT). '--repository' takes 'Repo' or 'Project/Repo'
+            (the project part must match that project).
+
+            Filter: '*' (default), comma-separated 'Repo', 'Project/Repo', globs, or 'ring:<name>'.
             """);
         return 0;
     }
@@ -59,10 +65,11 @@ public static partial class Commands
         var matrix = BuildMatrix(selected);
         var json = matrix.ToJsonString();
 
+        output.WriteLine($"Project: {inventory.Project}");
         output.WriteLine($"Selected {selected.Count} of {inventory.Repositories.Count} repositories:");
         foreach (var repo in selected)
         {
-            output.WriteLine($"  - {repo.Key} (base: {repo.BaseBranch}{(repo.Ring is null ? "" : $", ring: {repo.Ring}")})");
+            output.WriteLine($"  - {repo.Repository} (base: {repo.BaseBranch}{(repo.Ring is null ? "" : $", ring: {repo.Ring}")})");
         }
 
         output.WriteLine($"##vso[task.setvariable variable=matrix;isOutput=true]{json}");
@@ -70,27 +77,42 @@ public static partial class Commands
         return Task.FromResult(0);
     }
 
-    /// <summary>Matrix keys must be unique and contain only letters, digits and underscores.</summary>
+    /// <summary>Matrix keys (the sanitized repository name) must be unique and contain only letters, digits and underscores.</summary>
     public static JsonObject BuildMatrix(IReadOnlyList<RepositoryEntry> repositories)
     {
         var matrix = new JsonObject();
         foreach (var repo in repositories)
         {
-            var key = NonIdentifierChars().Replace($"{repo.Project}_{repo.Repository}", "_");
+            var key = NonIdentifierChars().Replace(repo.Repository, "_");
             var unique = key;
             for (var i = 2; matrix.ContainsKey(unique); i++)
             {
                 unique = $"{key}_{i}";
             }
 
-            matrix[unique] = new JsonObject
-            {
-                ["targetProject"] = repo.Project,
-                ["targetRepository"] = repo.Repository,
-            };
+            matrix[unique] = new JsonObject { ["targetRepository"] = repo.Repository };
         }
 
         return matrix;
+    }
+
+    /// <summary>Finds an inventory entry by <c>Repo</c> or <c>Project/Repo</c>; the project part must be the inventory's project.</summary>
+    public static RepositoryEntry ResolveRepository(RepositoryInventory inventory, string key, string source)
+    {
+        var name = key.Trim();
+        var slash = name.IndexOf('/', StringComparison.Ordinal);
+        if (slash >= 0)
+        {
+            var project = name[..slash];
+            name = name[(slash + 1)..];
+            if (!string.Equals(project, inventory.Project, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Repository '{key}' names project '{project}', but all repositories are in project '{inventory.Project}'.");
+            }
+        }
+
+        return inventory.Repositories.FirstOrDefault(r => string.Equals(r.Repository, name, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"Repository '{key}' is not in {source}.");
     }
 
     public static async Task<int> RunAsync(CommandLine cl, TextWriter output, CancellationToken ct)
@@ -98,8 +120,7 @@ public static partial class Commands
         var configDir = Path.GetFullPath(cl.Get("config", "config"));
         var key = cl.Require("repository");
         var inventory = ConfigLoader.LoadInventory(configDir);
-        var entry = inventory.Repositories.FirstOrDefault(r => string.Equals(r.Key, key, StringComparison.OrdinalIgnoreCase))
-            ?? throw new ArgumentException($"Repository '{key}' is not in {Path.Combine(configDir, "repositories.json")}.");
+        var entry = ResolveRepository(inventory, key, Path.Combine(configDir, "repositories.json"));
         if (!entry.Enabled)
         {
             output.WriteLine($"Repository {entry.Key} is disabled in the inventory; nothing to do.");
@@ -204,7 +225,7 @@ public static partial class Commands
     }
 
     /// <summary>Semantic checks beyond JSON shape (the JSON schemas cover editor-time validation).</summary>
-    public static List<string> ValidateConfiguration(string configDir)
+    public static List<string> ValidateConfiguration(string configDir, Func<string, string?>? getVariable = null)
     {
         var errors = new List<string>();
         JsonObject defaults;
@@ -212,7 +233,7 @@ public static partial class Commands
         try
         {
             defaults = ConfigLoader.LoadDefaultsNode(configDir);
-            inventory = ConfigLoader.LoadInventory(configDir);
+            inventory = ConfigLoader.LoadInventory(configDir, getVariable);
         }
         catch (Exception ex) when (ex is InvalidOperationException or FileNotFoundException or JsonException)
         {
@@ -259,6 +280,24 @@ public static partial class Commands
             if (string.IsNullOrWhiteSpace(s.BranchName) || s.BranchName.Contains(' ') || s.BranchName.StartsWith("refs/", StringComparison.Ordinal))
             {
                 errors.Add($"{source}: branchName must be a plain branch name such as dependency-agent/net10-lts.");
+            }
+
+            foreach (var (name, value) in new[]
+            {
+                ("ai.reasoningEffort", s.Ai.ReasoningEffort),
+                ("ai.copilot.reasoningEffort", s.Ai.Copilot.ReasoningEffort),
+                ("ai.openAi.reasoningEffort", s.Ai.OpenAi.ReasoningEffort),
+            })
+            {
+                if (value is not null && !ReasoningEfforts.Contains(value, StringComparer.Ordinal))
+                {
+                    errors.Add($"{source}: {name} '{value}' must be one of {string.Join(", ", ReasoningEfforts)}.");
+                }
+            }
+
+            if (s.Ai.Roslynk.Enabled && !s.Ai.Roslynk.Arguments.Contains("stdio", StringComparer.Ordinal))
+            {
+                errors.Add($"{source}: ai.roslynk.arguments must contain 'stdio' (without it Roslynk starts as an HTTP daemon, not an MCP stdio server).");
             }
 
             if (!Uri.TryCreate(s.Ai.LearnMcp.Endpoint, UriKind.Absolute, out var learn) || learn.Scheme != Uri.UriSchemeHttps)

@@ -19,10 +19,17 @@ Create a variable group named `dependency-agent-secrets` (Pipelines > Library):
 
 | Variable | Secret | Value |
 |---|---|---|
-| `COPILOT_GITHUB_TOKEN` | yes | Fine-grained GitHub personal access token of a **Copilot-licensed user**, with the **Copilot Requests** account permission. Used by the GitHub Copilot CLI. |
+| `COPILOT_GITHUB_TOKEN` | yes | Fine-grained GitHub personal access token of a **Copilot-licensed user**, with the **Copilot Requests** account permission. Used by the GitHub Copilot CLI. The user must have access to **Claude Sonnet 5.5** in Copilot (the default model, see below). |
 | `OPENAI_API_KEY` | yes | OpenAI API key. Used when `ai.provider` is `openai`. |
 
 Set only what you use. Link the group to the pipeline (Pipeline > Edit > Variables > Variable groups, or authorise it when prompted at first run). Consider restricting who can edit the group and the pipeline: anyone who can edit the pipeline can read the secrets.
+
+The default configuration runs the Copilot CLI with **Claude Sonnet 5.5** at **high** reasoning effort (`ai.copilot.model`, `ai.copilot.reasoningEffort`). Before the first run:
+
+- Make sure the token's user can use that model. For Copilot Business/Enterprise an organisation or enterprise owner may have to **enable the Claude Sonnet 5.5 policy** (GitHub > Organization/Enterprise settings > Copilot > Policies).
+- Confirm the exact model id in the Copilot CLI model picker (`/model` in an interactive `copilot` session logged in with that token's account). The shipped id `claude-sonnet-5.5` may differ from what the picker shows for your account; if so, set `ai.copilot.model` in `config/defaults.json`.
+
+Roslynk (the Roslyn MCP server the AI can use) needs no setup: the pipeline installs the pinned `Roslynk` .NET tool (`roslynkVersion` variable in `azure-pipelines.yml`) in the Upgrade job whenever the AI provider is not `none`.
 
 Variable names are configurable (`ai.copilot.tokenVariable`, `ai.openAi.apiKeyVariable`), see [configuration.md](configuration.md). An undefined variable reaches the process as the literal text `$(NAME)`; the agent treats that as "not set".
 
@@ -35,21 +42,21 @@ The Build Service identity must be able to read, push a branch and raise a PR in
 - Create branch
 - Contribute to pull requests
 
-Which identity? By default a pipeline runs as the **project-scoped** build identity named `<Project> Build Service (<Organisation>)`, where `<Project>` is the project that contains the pipeline (this repository's project). If "Limit job authorization scope to current project" is turned off (see below) it runs as the **collection-scoped** identity `Project Collection Build Service (<Organisation>)`. Grant the permissions to the one you actually run as; search for both names in the security dialog and check which one applies by looking at the identity shown in a failing 403 message. For cross-project targets, add the identity to each target project's repo security (the identity is a user in the organisation, so it can be added in any project).
+Which identity? By default a pipeline runs as the **project-scoped** build identity named `<Project> Build Service (<Organisation>)`, where `<Project>` is the project that contains the pipeline (this repository's project). All target repositories must be in that same project, so this is the only identity you need to grant. (If "Limit job authorization scope to current project" were turned off, the pipeline would instead run as the collection-scoped `Project Collection Build Service (<Organisation>)`; keep it on.) Check which identity applies by looking at the identity shown in a failing 403 message.
 
 Branch policy on the **agent branch** (`dependency-agent/*`) must not block the agent's force-push. Do not apply "Require a minimum number of reviewers" to `dependency-agent/*`; apply it to the base branches instead (see section 7).
 
 ## 5. Organisation and project settings
 
-The agent clones the repositories listed in `config/repositories.json`, which are not declared as `resources` in the YAML. Two security features block that by default.
+The agent clones the repositories listed in `config/repositories.json`, which are not declared as `resources` in the YAML. All of them are in one Azure DevOps project (the top-level `project` of `repositories.json`, normally the pipeline's own project). Two security features block cloning undeclared repositories by default and must be relaxed for **this pipeline's project**.
 
 | Setting (Organisation settings > Pipelines > Settings; also per project) | Required value | Why |
 |---|---|---|
-| **Limit job authorization scope to current project for non-release pipelines** | **Off**, if any target repo is in a different project from the pipeline | The job token otherwise cannot read other projects. |
-| **Limit job authorization scope to referenced Azure DevOps repositories** | **Off** | With it on, the job token can only access repositories the YAML declares, so cloning anything else fails with 403/404. |
-| **Protect access to repositories in YAML pipelines** | **Off** | Related repository-access gate; with it on, undeclared repositories are inaccessible. |
+| **Limit job authorization scope to current project for non-release pipelines** | **On** (recommended) | Targets are in the same project as the pipeline, so the project-scoped job token is enough, and it cannot reach other projects. |
+| **Limit job authorization scope to referenced Azure DevOps repositories** | **Off** (for this pipeline's project) | With it on, the job token can only access repositories the YAML declares, so cloning anything else fails with 403/404. |
+| **Protect access to repositories in YAML pipelines** | **Off** (for this pipeline's project) | Related repository-access gate; with it on, undeclared repositories are inaccessible. |
 
-Trade-off: turning these off lets every pipeline in the project (organisation, for the collection-level switch) use its Build Service identity on all repositories that identity is permitted to access. Mitigate by:
+Trade-off: turning the last two off lets every pipeline in the project (organisation, for the collection-level switch) use its Build Service identity on all repositories that identity is permitted to access. Mitigate by:
 
 - granting the Build Service identity permissions **only** on the target repositories (it is a deny-by-default model; the settings above do not grant anything by themselves);
 - restricting who can edit and run this pipeline and who can change this repository (branch policy with required reviewers on `main` here);

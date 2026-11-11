@@ -13,10 +13,15 @@
     },
     "repositories": {
       "type": "array",
-      "description": "Target repositories. 'project/repository' (case-insensitive) must be unique.",
+      "description": "Target repositories, all in the project above. 'repository' (case-insensitive) must be unique.",
       "items": {
         "$ref": "#/$defs/repository"
       }
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The single Azure DevOps project that contains every target repository. Optional: when omitted, the pipeline's own project (SYSTEM_TEAMPROJECT) is used."
     }
   },
   "$defs": {
@@ -24,14 +29,13 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "project",
         "repository"
       ],
       "properties": {
         "project": {
           "type": "string",
           "minLength": 1,
-          "description": "Azure DevOps project name."
+          "description": "Deprecated: must equal the top-level project (an entry may repeat it but may not name a different project)."
         },
         "repository": {
           "type": "string",
