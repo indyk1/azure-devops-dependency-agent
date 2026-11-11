@@ -1,0 +1,226 @@
+# dependency-agent: nightly .NET LTS / NuGet / Docker upgrade of the repositories listed in config/repositories.json.
+# One PR per target repo (draft when not green, never auto-merged). Target repos are cloned by the tool itself using
+# the job access token, so this pipeline only checks out *this* repo (for config) and does not persist credentials.
+
+trigger: none
+pr: none
+
+schedules:
+  # Cron is evaluated in UTC (not the agent's local time zone): 02:00 UTC = 03:00 CET / 04:00 CEST.
+  # Change the "0 2 * * *" expression (minute hour day month weekday) to move the run, e.g. "30 21 * * 1-5" = 21:30 UTC Mon-Fri.
+  - cron: "0 2 * * *"
+    displayName: Nightly upgrade run
+    branches:
+      include:
+        - main
+    always: true # run even when nothing changed in this repo
+
+parameters:
+  - name: repositories
+    displayName: 'Repositories to process: * | Project/Repo | Repo | ring:<name> | comma-separated list'
+    type: string
+    default: '*'
+  - name: dryRun
+    displayName: 'Dry run (clone, update, verify; never push or touch PRs)'
+    type: boolean
+    default: false
+  - name: aiProvider
+    displayName: 'AI provider for code fixes'
+    type: string
+    default: config
+    values:
+      - config
+      - copilot
+      - openai
+      - none
+  - name: maxParallel
+    displayName: 'Maximum repositories processed in parallel'
+    type: number
+    default: 4
+
+variables:
+  # Variable group holding the secrets COPILOT_GITHUB_TOKEN and/or OPENAI_API_KEY (mark them secret).
+  - group: dependency-agent-secrets
+  - name: DOTNET_CLI_TELEMETRY_OPTOUT
+    value: '1'
+  - name: DOTNET_NOLOGO
+    value: '1'
+  # PLACEHOLDER: pin to the @github/copilot npm version you have validated. Never use "latest" for an unattended job.
+  - name: copilotCliVersion
+    value: '0.0.400'
+
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  # ---------------------------------------------------------------- Build: compile + test the tool, publish it once
+  - stage: Build
+    displayName: Build tool
+    jobs:
+      - job: BuildJob
+        displayName: Build and test
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - task: UseDotNet@2
+            displayName: Install .NET 8 SDK (tests exercise older target frameworks)
+            inputs:
+              packageType: sdk
+              version: 8.0.x
+          - task: UseDotNet@2
+            displayName: Install .NET SDK from global.json
+            inputs:
+              packageType: sdk
+              useGlobalJson: true
+          - script: dotnet test DependencyAgent.slnx -c Release
+            displayName: Test
+          - script: dotnet publish src/DependencyAgent.Cli -c Release -o "$(Build.ArtifactStagingDirectory)/tool"
+            displayName: Publish tool (framework-dependent)
+          - publish: $(Build.ArtifactStagingDirectory)/tool
+            artifact: tool
+            displayName: Publish tool artifact
+
+  # ---------------------------------------------------------------- Plan: validate config, expand repos into a matrix
+  - stage: Plan
+    displayName: Plan
+    dependsOn: Build
+    jobs:
+      - job: PlanJob
+        displayName: Select repositories
+        timeoutInMinutes: 10
+        steps:
+          - checkout: self
+            persistCredentials: false
+          - download: current
+            artifact: tool
+            displayName: Download tool
+          - task: UseDotNet@2
+            displayName: Install .NET 10 runtime
+            inputs:
+              packageType: runtime
+              version: 10.0.x
+          # name: plan => output variables are addressed as plan.matrix / plan.repoCount by later jobs and stages.
+          - script: >-
+              dotnet "$(Pipeline.Workspace)/tool/dependency-agent.dll" plan
+              --config "$(Build.SourcesDirectory)/config" --filter "$REPO_FILTER"
+            name: plan
+            displayName: Plan (also validates config)
+            env:
+              REPO_FILTER: ${{ parameters.repositories }} # via env, never interpolated into the shell command
+
+  # ---------------------------------------------------------------- Upgrade: one matrix leg per repository
+  - stage: Upgrade
+    displayName: Upgrade repositories
+    dependsOn: Plan
+    condition: and(succeeded(), gt(dependencies.Plan.outputs['PlanJob.plan.repoCount'], 0))
+    jobs:
+      - job: Upgrade
+        displayName: Upgrade repository
+        timeoutInMinutes: 120
+        cancelTimeoutInMinutes: 5
+        strategy:
+          matrix: $[ stageDependencies.Plan.PlanJob.outputs['plan.matrix'] ]
+          maxParallel: ${{ parameters.maxParallel }}
+        steps:
+          - checkout: self # config only
+            persistCredentials: false
+          - download: current
+            artifact: tool
+            displayName: Download tool
+          # 8.0.x first, 10.0.x last so `dotnet` defaults to the newest SDK. The 8.x SDK/runtime lets the baseline build
+          # (before the upgrade) and tests of not-yet-upgraded target repos run on their original framework.
+          - task: UseDotNet@2
+            displayName: Install .NET 8 (baseline build/tests of older TFMs)
+            inputs:
+              packageType: sdk
+              version: 8.0.x
+          - task: UseDotNet@2
+            displayName: Install .NET 10 SDK
+            inputs:
+              packageType: sdk
+              version: 10.0.x
+          - task: NuGetAuthenticate@1 # credentials for private Azure Artifacts feeds used by target repos
+            displayName: NuGet authenticate
+          # Copilot CLI is only needed when the effective provider may be copilot (config may select it).
+          - ${{ if and(ne(parameters.aiProvider, 'openai'), ne(parameters.aiProvider, 'none')) }}:
+              - task: NodeTool@0
+                displayName: Install Node.js
+                inputs:
+                  versionSpec: 22.x
+              - script: npm install -g @github/copilot@$(copilotCliVersion)
+                displayName: Install Copilot CLI $(copilotCliVersion)
+          - script: |
+              set -euo pipefail
+              args=(run
+                --config "$(Build.SourcesDirectory)/config"
+                --repository "$TARGET_PROJECT/$TARGET_REPOSITORY"
+                --output "$OUT_DIR"
+                --work-dir "$(Agent.TempDirectory)/work"
+                --ai-provider "$AI_PROVIDER")
+              if [ "${DRY_RUN,,}" = "true" ]; then args+=(--dry-run); fi
+              dotnet "$(Pipeline.Workspace)/tool/dependency-agent.dll" "${args[@]}"
+            displayName: Upgrade $(targetProject)/$(targetRepository)
+            env:
+              TARGET_PROJECT: $(targetProject)
+              TARGET_REPOSITORY: $(targetRepository)
+              OUT_DIR: $(Build.ArtifactStagingDirectory)/out
+              AI_PROVIDER: ${{ parameters.aiProvider }}
+              DRY_RUN: ${{ parameters.dryRun }}
+              # Secrets must be mapped explicitly; the tool scrubs them from every child process that runs repo code.
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+              COPILOT_GITHUB_TOKEN: $(COPILOT_GITHUB_TOKEN)
+              OPENAI_API_KEY: $(OPENAI_API_KEY)
+          - script: |
+              name="report-${TARGET_PROJECT}-${TARGET_REPOSITORY}"
+              safe=`printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_'`
+              echo "##vso[task.setvariable variable=reportArtifact]$safe"
+            displayName: Sanitize artifact name
+            condition: always()
+            env:
+              TARGET_PROJECT: $(targetProject)
+              TARGET_REPOSITORY: $(targetRepository)
+          - publish: $(Build.ArtifactStagingDirectory)/out
+            artifact: $(reportArtifact)
+            displayName: Publish report
+            condition: always()
+
+  # ---------------------------------------------------------------- Report: merge per-repo reports into one summary
+  - stage: Report
+    displayName: Report
+    dependsOn:
+      - Build
+      - Plan
+      - Upgrade
+    condition: and(always(), eq(dependencies.Build.result, 'Succeeded'), eq(dependencies.Plan.result, 'Succeeded'))
+    jobs:
+      - job: ReportJob
+        displayName: Run summary
+        timeoutInMinutes: 15
+        steps:
+          - checkout: none
+          - download: current
+            artifact: tool
+            displayName: Download tool
+          - task: DownloadPipelineArtifact@2
+            displayName: Download repository reports
+            continueOnError: true # nothing to download when no repository was processed
+            inputs:
+              buildType: current
+              itemPattern: 'report-*/**'
+              targetPath: $(Pipeline.Workspace)/reports
+          - task: UseDotNet@2
+            displayName: Install .NET 10 runtime
+            inputs:
+              packageType: runtime
+              version: 10.0.x
+          - script: |
+              set -euo pipefail
+              mkdir -p "$(Pipeline.Workspace)/reports"
+              dotnet "$(Pipeline.Workspace)/tool/dependency-agent.dll" report \
+                --input "$(Pipeline.Workspace)/reports" --output "$(Build.ArtifactStagingDirectory)/summary.md"
+            displayName: Build run summary # uploads the summary to the pipeline run itself (TF_BUILD is set)
+          - publish: $(Build.ArtifactStagingDirectory)/summary.md
+            artifact: summary
+            displayName: Publish summary
+            condition: always()
