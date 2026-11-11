@@ -45,9 +45,9 @@ variables:
     value: '1'
   - name: DOTNET_NOLOGO
     value: '1'
-  # PLACEHOLDER: pin to the @github/copilot npm version you have validated. Never use "latest" for an unattended job.
+  # Pinned @github/copilot npm version (flags verified against this version; see CopilotCliProvider.VerifiedVersion). Never use "latest" for an unattended job.
   - name: copilotCliVersion
-    value: '0.0.400'
+    value: '1.0.109'
 
 pool:
   vmImage: ubuntu-latest

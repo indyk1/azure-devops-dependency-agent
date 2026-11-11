@@ -22,13 +22,18 @@ public sealed class AiFixer : ICodeFixer
     private readonly Func<RepoContext, ILearnDocsClient?> _docsFactory;
     private readonly Func<RepoContext, Func<CancellationToken, Task<VerificationResult>>?> _buildToolFactory;
 
+    /// <summary>Optional extra Learn deny terms per repository (e.g. namespaces and project names extracted from the code).</summary>
+    private readonly Func<RepoContext, IEnumerable<string>>? _extraDenyTerms;
+
     public AiFixer(
         IEnumerable<IAiProvider> providers,
         IChangeGuard guard,
         IProcessRunner runner,
         Func<RepoContext, ILearnDocsClient?> docsClientFactory,
-        Func<RepoContext, Func<CancellationToken, Task<VerificationResult>>?> buildToolFactory)
+        Func<RepoContext, Func<CancellationToken, Task<VerificationResult>>?> buildToolFactory,
+        Func<RepoContext, IEnumerable<string>>? extraDenyTermsFactory = null)
     {
+        _extraDenyTerms = extraDenyTermsFactory;
         _providers = providers.ToList();
         _guard = guard;
         _runner = runner;
@@ -246,7 +251,10 @@ public sealed class AiFixer : ICodeFixer
         tempDir = Path.Combine(Path.GetTempPath(), "depagent-learn-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDir);
         var denyFile = Path.Combine(tempDir, "deny-terms.txt");
-        File.WriteAllLines(denyFile, BuildDenyTerms(context));
+        var denyTerms = BuildDenyTerms(context)
+            .Concat(_extraDenyTerms?.Invoke(context) ?? [])
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        File.WriteAllLines(denyFile, denyTerms);
         var audit = AuditLogPath(context);
         Directory.CreateDirectory(Path.GetDirectoryName(audit)!);
         return BuildLearnProxyCommand(exe, learn, denyFile, audit);
