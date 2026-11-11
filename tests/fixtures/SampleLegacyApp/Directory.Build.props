@@ -1,0 +1,9 @@
+<Project>
+  <!-- Deliberately standalone: stops MSBuild inheriting the dependency-agent repo's own Directory.Build.props. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dependency Agent repository inventory",
+  "description": "Inventory of target repositories (config/repositories.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "repositories"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "repositories": {
+      "type": "array",
+      "description": "Target repositories. 'project/repository' (case-insensitive) must be unique.",
+      "items": {
+        "$ref": "#/$defs/repository"
+      }
+    }
+  },
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "repository"
+      ],
+      "properties": {
+        "project": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps project name."
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Azure DevOps repository name."
+        },
+        "baseBranch": {
+          "type": "string",
+          "minLength": 1,
+          "default": "main",
+          "description": "Branch the PR targets."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Kill switch. Disabled entries are never processed, whatever the run filter says."
+        },
+        "ring": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Rollout ring label (e.g. pilot, broad). Usable in the run filter as ring:NAME."
+        },
+        "owners": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Informational owner list shown in reports."
+        },
+        "overrides": {
+          "$ref": "defaults.schema.json#/$defs/settings",
+          "description": "Partial settings applied on top of defaults and the repository's own .dependency-agent.json (highest precedence). All properties optional."
+        }
+      }
+    }
+  }
+}

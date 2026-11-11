@@ -1,0 +1,866 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dependency Agent settings",
+  "description": "Defaults for the dependency agent (config/defaults.json). Mirrors AgentSettings. All properties optional; '#/$defs/settings' is the same shape and is reused for per-repository overrides.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Schema reference (ignored)."
+    },
+    "targetFramework": {
+      "type": "string",
+      "description": "Target framework moniker for modern .NET projects.",
+      "pattern": "^net\\d+\\.\\d+$",
+      "default": "net10.0"
+    },
+    "branchName": {
+      "type": "string",
+      "description": "Branch the agent owns in each target repository.",
+      "minLength": 1,
+      "default": "dependency-agent/net10-lts"
+    },
+    "gitIdentity": {
+      "type": "object",
+      "description": "Git author/committer identity used for agent commits.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Author/committer name.",
+          "default": "Dependency Agent"
+        },
+        "email": {
+          "type": "string",
+          "description": "Author/committer email.",
+          "default": "dependency-agent@noreply.local"
+        }
+      },
+      "additionalProperties": false
+    },
+    "packages": {
+      "type": "object",
+      "description": "NuGet package update policy.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Update NuGet packages at all.",
+          "default": true
+        },
+        "trackTargetMajorFor": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Package id glob patterns (case-insensitive, * wildcard) whose major version must track the target framework major (e.g. Microsoft.Extensions.* -> 10.x for net10.0). Only applied when the package publishes a version with that major.",
+          "default": [
+            "Microsoft.AspNetCore.*",
+            "Microsoft.EntityFrameworkCore*",
+            "Microsoft.Extensions.*",
+            "System.*",
+            "Microsoft.Data.Sqlite*"
+          ]
+        },
+        "allowPrerelease": {
+          "type": "boolean",
+          "description": "Allow prerelease versions. Default false: latest stable only.",
+          "default": false
+        },
+        "pins": {
+          "type": "object",
+          "description": "Exact version pins: package id -> version. Pinned packages are set to that version and never moved.",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": {}
+        },
+        "maxMajor": {
+          "type": "object",
+          "description": "Maximum allowed major version per package id glob pattern, e.g. {\"AutoMapper\": 14}.",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "ignore": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Package id glob patterns never touched.",
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "docker": {
+      "type": "object",
+      "description": "Dockerfile base image updates (mcr.microsoft.com/dotnet/* images).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Update Dockerfile mcr.microsoft.com/dotnet/* image tags.",
+          "default": true
+        },
+        "filePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "File glob patterns treated as Dockerfiles.",
+          "default": [
+            "**/Dockerfile",
+            "**/Dockerfile.*",
+            "**/*.Dockerfile",
+            "**/*.dockerfile"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "description": "Restore/build/test verification.",
+      "properties": {
+        "solution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Solution or project to build, relative to the repository root. Null = auto-detect (single .sln/.slnx at root, else all projects).",
+          "default": null
+        },
+        "runTests": {
+          "type": "boolean",
+          "description": "Run dotnet test after a successful build.",
+          "default": true
+        },
+        "failOnNewWarnings": {
+          "type": "boolean",
+          "description": "Fail the run (draft PR) if the upgraded build has warnings not present in the baseline build.",
+          "default": true
+        },
+        "buildArguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra arguments appended to dotnet build, e.g. [\"-p:ContinuousIntegrationBuild=true\"].",
+          "default": []
+        },
+        "testArguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra arguments appended to dotnet test, e.g. [\"--filter\", \"Category!=Integration\"].",
+          "default": []
+        },
+        "buildTimeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Build timeout in minutes.",
+          "default": 20
+        },
+        "testTimeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Test timeout in minutes.",
+          "default": 30
+        }
+      },
+      "additionalProperties": false
+    },
+    "guards": {
+      "type": "object",
+      "description": "Limits on what code fixers (rule-based and AI) may change.",
+      "properties": {
+        "maxChangedFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Max files changed by code fixes, excluding budgetExcludePatterns.",
+          "default": 40
+        },
+        "maxChangedLines": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Max added+removed lines from code fixes, excluding budgetExcludePatterns.",
+          "default": 1500
+        },
+        "budgetExcludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Files excluded from the change budget (manifest updates made by the deterministic updater).",
+          "default": [
+            "**/*.csproj",
+            "**/*.fsproj",
+            "**/*.vbproj",
+            "**/Directory.Packages.props",
+            "**/Directory.Build.props",
+            "**/global.json",
+            "**/packages.lock.json",
+            "**/Dockerfile",
+            "**/Dockerfile.*",
+            "**/*.Dockerfile",
+            "**/*.dockerfile"
+          ]
+        },
+        "allowedEditPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns code fixers may edit. Anything else is reverted.",
+          "default": [
+            "**/*.cs",
+            "**/*.csproj",
+            "**/*.props",
+            "**/*.targets",
+            "**/*.razor",
+            "**/*.cshtml"
+          ]
+        },
+        "protectedPatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Glob patterns code fixers may never edit. Union-merged: a repo file or override can add patterns but never remove them.",
+          "default": [
+            ".git/**",
+            "**/Authentication/**",
+            "**/Authorization/**",
+            "**/Cryptography/**",
+            "**/Security/**",
+            "**/*.pfx",
+            "**/*.snk",
+            "**/appsettings*.json",
+            "**/azure-pipelines*.yml",
+            "**/.dependency-agent.json"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ruleFixes": {
+      "type": "object",
+      "description": "Deterministic rule-based code fixes.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable rule-based fixes.",
+          "default": true
+        },
+        "formatDiagnostics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Diagnostic IDs passed to dotnet format analyzers --diagnostics when present in build output.",
+          "default": []
+        },
+        "rewriteRulesFile": {
+          "type": "string",
+          "description": "Path (relative to the agent's config directory) of the declarative rewrite rules file.",
+          "default": "rewrite-rules.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ai": {
+      "type": "object",
+      "description": "AI-assisted code fixing.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Allow AI code fixing.",
+          "default": true
+        },
+        "provider": {
+          "type": "string",
+          "description": "AI provider.",
+          "enum": [
+            "copilot",
+            "openai",
+            "none"
+          ],
+          "default": "copilot"
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Model name. Null = provider default.",
+          "default": null
+        },
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Max build -> fix iterations.",
+          "default": 3
+        },
+        "timeoutMinutes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Wall-clock limit for a single AI provider invocation, in minutes.",
+          "default": 20
+        },
+        "copilot": {
+          "type": "object",
+          "description": "GitHub Copilot CLI settings.",
+          "properties": {
+            "executable": {
+              "type": "string",
+              "description": "Copilot CLI executable name or path.",
+              "default": "copilot"
+            },
+            "tokenVariable": {
+              "type": "string",
+              "description": "Environment variable holding the GitHub token of a Copilot-licensed user.",
+              "default": "COPILOT_GITHUB_TOKEN"
+            }
+          },
+          "additionalProperties": false
+        },
+        "openAi": {
+          "type": "object",
+          "description": "OpenAI settings.",
+          "properties": {
+            "endpoint": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Optional base URL for OpenAI-compatible endpoints. Null = api.openai.com.",
+              "default": null
+            },
+            "apiKeyVariable": {
+              "type": "string",
+              "description": "Environment variable holding the API key.",
+              "default": "OPENAI_API_KEY"
+            },
+            "defaultModel": {
+              "type": "string",
+              "description": "Model used when ai.model is null.",
+              "default": "gpt-5.1"
+            },
+            "maxToolTurns": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Max tool-calling turns per iteration.",
+              "default": 40
+            }
+          },
+          "additionalProperties": false
+        },
+        "learnMcp": {
+          "type": "object",
+          "description": "Microsoft Learn MCP lookups through the local sanitizing proxy.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Allow documentation lookups.",
+              "default": true
+            },
+            "endpoint": {
+              "type": "string",
+              "description": "Learn MCP endpoint.",
+              "default": "https://learn.microsoft.com/api/mcp"
+            },
+            "maxQueryLength": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum length of a sanitized query.",
+              "default": 200
+            },
+            "denyTerms": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra terms (case-insensitive) that must never be sent, e.g. internal product or company names. Union-merged across layers.",
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "pullRequest": {
+      "type": "object",
+      "description": "Pull request settings.",
+      "properties": {
+        "titlePrefix": {
+          "type": "string",
+          "description": "Prefix of the PR title.",
+          "default": "[dependency-agent]"
+        },
+        "reviewers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Reviewer identities (Azure DevOps unique names or group descriptors) added as optional reviewers.",
+          "default": []
+        },
+        "workItemIds": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "description": "Work item ids to link to the PR.",
+          "default": []
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Labels applied to the PR.",
+          "default": [
+            "dependency-agent"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "settings": {
+      "type": "object",
+      "description": "Agent settings (camelCase mirror of AgentSettings). Every property is optional; omitted properties take the built-in default.",
+      "properties": {
+        "targetFramework": {
+          "type": "string",
+          "description": "Target framework moniker for modern .NET projects.",
+          "pattern": "^net\\d+\\.\\d+$",
+          "default": "net10.0"
+        },
+        "branchName": {
+          "type": "string",
+          "description": "Branch the agent owns in each target repository.",
+          "minLength": 1,
+          "default": "dependency-agent/net10-lts"
+        },
+        "gitIdentity": {
+          "type": "object",
+          "description": "Git author/committer identity used for agent commits.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Author/committer name.",
+              "default": "Dependency Agent"
+            },
+            "email": {
+              "type": "string",
+              "description": "Author/committer email.",
+              "default": "dependency-agent@noreply.local"
+            }
+          },
+          "additionalProperties": false
+        },
+        "packages": {
+          "type": "object",
+          "description": "NuGet package update policy.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Update NuGet packages at all.",
+              "default": true
+            },
+            "trackTargetMajorFor": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Package id glob patterns (case-insensitive, * wildcard) whose major version must track the target framework major (e.g. Microsoft.Extensions.* -> 10.x for net10.0). Only applied when the package publishes a version with that major.",
+              "default": [
+                "Microsoft.AspNetCore.*",
+                "Microsoft.EntityFrameworkCore*",
+                "Microsoft.Extensions.*",
+                "System.*",
+                "Microsoft.Data.Sqlite*"
+              ]
+            },
+            "allowPrerelease": {
+              "type": "boolean",
+              "description": "Allow prerelease versions. Default false: latest stable only.",
+              "default": false
+            },
+            "pins": {
+              "type": "object",
+              "description": "Exact version pins: package id -> version. Pinned packages are set to that version and never moved.",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              },
+              "default": {}
+            },
+            "maxMajor": {
+              "type": "object",
+              "description": "Maximum allowed major version per package id glob pattern, e.g. {\"AutoMapper\": 14}.",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "default": {}
+            },
+            "ignore": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Package id glob patterns never touched.",
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "docker": {
+          "type": "object",
+          "description": "Dockerfile base image updates (mcr.microsoft.com/dotnet/* images).",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Update Dockerfile mcr.microsoft.com/dotnet/* image tags.",
+              "default": true
+            },
+            "filePatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "File glob patterns treated as Dockerfiles.",
+              "default": [
+                "**/Dockerfile",
+                "**/Dockerfile.*",
+                "**/*.Dockerfile",
+                "**/*.dockerfile"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "verification": {
+          "type": "object",
+          "description": "Restore/build/test verification.",
+          "properties": {
+            "solution": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Solution or project to build, relative to the repository root. Null = auto-detect (single .sln/.slnx at root, else all projects).",
+              "default": null
+            },
+            "runTests": {
+              "type": "boolean",
+              "description": "Run dotnet test after a successful build.",
+              "default": true
+            },
+            "failOnNewWarnings": {
+              "type": "boolean",
+              "description": "Fail the run (draft PR) if the upgraded build has warnings not present in the baseline build.",
+              "default": true
+            },
+            "buildArguments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra arguments appended to dotnet build, e.g. [\"-p:ContinuousIntegrationBuild=true\"].",
+              "default": []
+            },
+            "testArguments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra arguments appended to dotnet test, e.g. [\"--filter\", \"Category!=Integration\"].",
+              "default": []
+            },
+            "buildTimeoutMinutes": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Build timeout in minutes.",
+              "default": 20
+            },
+            "testTimeoutMinutes": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Test timeout in minutes.",
+              "default": 30
+            }
+          },
+          "additionalProperties": false
+        },
+        "guards": {
+          "type": "object",
+          "description": "Limits on what code fixers (rule-based and AI) may change.",
+          "properties": {
+            "maxChangedFiles": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Max files changed by code fixes, excluding budgetExcludePatterns.",
+              "default": 40
+            },
+            "maxChangedLines": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Max added+removed lines from code fixes, excluding budgetExcludePatterns.",
+              "default": 1500
+            },
+            "budgetExcludePatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Files excluded from the change budget (manifest updates made by the deterministic updater).",
+              "default": [
+                "**/*.csproj",
+                "**/*.fsproj",
+                "**/*.vbproj",
+                "**/Directory.Packages.props",
+                "**/Directory.Build.props",
+                "**/global.json",
+                "**/packages.lock.json",
+                "**/Dockerfile",
+                "**/Dockerfile.*",
+                "**/*.Dockerfile",
+                "**/*.dockerfile"
+              ]
+            },
+            "allowedEditPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Glob patterns code fixers may edit. Anything else is reverted.",
+              "default": [
+                "**/*.cs",
+                "**/*.csproj",
+                "**/*.props",
+                "**/*.targets",
+                "**/*.razor",
+                "**/*.cshtml"
+              ]
+            },
+            "protectedPatterns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Glob patterns code fixers may never edit. Union-merged: a repo file or override can add patterns but never remove them.",
+              "default": [
+                ".git/**",
+                "**/Authentication/**",
+                "**/Authorization/**",
+                "**/Cryptography/**",
+                "**/Security/**",
+                "**/*.pfx",
+                "**/*.snk",
+                "**/appsettings*.json",
+                "**/azure-pipelines*.yml",
+                "**/.dependency-agent.json"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "ruleFixes": {
+          "type": "object",
+          "description": "Deterministic rule-based code fixes.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable rule-based fixes.",
+              "default": true
+            },
+            "formatDiagnostics": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Diagnostic IDs passed to dotnet format analyzers --diagnostics when present in build output.",
+              "default": []
+            },
+            "rewriteRulesFile": {
+              "type": "string",
+              "description": "Path (relative to the agent's config directory) of the declarative rewrite rules file.",
+              "default": "rewrite-rules.json"
+            }
+          },
+          "additionalProperties": false
+        },
+        "ai": {
+          "type": "object",
+          "description": "AI-assisted code fixing.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Allow AI code fixing.",
+              "default": true
+            },
+            "provider": {
+              "type": "string",
+              "description": "AI provider.",
+              "enum": [
+                "copilot",
+                "openai",
+                "none"
+              ],
+              "default": "copilot"
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Model name. Null = provider default.",
+              "default": null
+            },
+            "maxIterations": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Max build -> fix iterations.",
+              "default": 3
+            },
+            "timeoutMinutes": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Wall-clock limit for a single AI provider invocation, in minutes.",
+              "default": 20
+            },
+            "copilot": {
+              "type": "object",
+              "description": "GitHub Copilot CLI settings.",
+              "properties": {
+                "executable": {
+                  "type": "string",
+                  "description": "Copilot CLI executable name or path.",
+                  "default": "copilot"
+                },
+                "tokenVariable": {
+                  "type": "string",
+                  "description": "Environment variable holding the GitHub token of a Copilot-licensed user.",
+                  "default": "COPILOT_GITHUB_TOKEN"
+                }
+              },
+              "additionalProperties": false
+            },
+            "openAi": {
+              "type": "object",
+              "description": "OpenAI settings.",
+              "properties": {
+                "endpoint": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Optional base URL for OpenAI-compatible endpoints. Null = api.openai.com.",
+                  "default": null
+                },
+                "apiKeyVariable": {
+                  "type": "string",
+                  "description": "Environment variable holding the API key.",
+                  "default": "OPENAI_API_KEY"
+                },
+                "defaultModel": {
+                  "type": "string",
+                  "description": "Model used when ai.model is null.",
+                  "default": "gpt-5.1"
+                },
+                "maxToolTurns": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Max tool-calling turns per iteration.",
+                  "default": 40
+                }
+              },
+              "additionalProperties": false
+            },
+            "learnMcp": {
+              "type": "object",
+              "description": "Microsoft Learn MCP lookups through the local sanitizing proxy.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Allow documentation lookups.",
+                  "default": true
+                },
+                "endpoint": {
+                  "type": "string",
+                  "description": "Learn MCP endpoint.",
+                  "default": "https://learn.microsoft.com/api/mcp"
+                },
+                "maxQueryLength": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum length of a sanitized query.",
+                  "default": 200
+                },
+                "denyTerms": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Extra terms (case-insensitive) that must never be sent, e.g. internal product or company names. Union-merged across layers.",
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "pullRequest": {
+          "type": "object",
+          "description": "Pull request settings.",
+          "properties": {
+            "titlePrefix": {
+              "type": "string",
+              "description": "Prefix of the PR title.",
+              "default": "[dependency-agent]"
+            },
+            "reviewers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Reviewer identities (Azure DevOps unique names or group descriptors) added as optional reviewers.",
+              "default": []
+            },
+            "workItemIds": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "description": "Work item ids to link to the PR.",
+              "default": []
+            },
+            "labels": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Labels applied to the PR.",
+              "default": [
+                "dependency-agent"
+              ]
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
