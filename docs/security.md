@@ -8,8 +8,9 @@ The agent runs unattended, holds credentials, edits repositories and sends code 
 |---|---|---|---|
 | NuGet feeds (nuget.org, private Artifacts feeds) | Package id and version queries; feed credentials for private feeds | Restore and package updates | The target repo's `NuGet.config` |
 | Microsoft Container Registry (`mcr.microsoft.com`) | Tag metadata queries | Docker image updates | `docker.enabled` |
-| AI provider (GitHub Copilot or OpenAI) | **Source code and build output of repositories where AI is enabled**: files the model reads, failing diagnostics, the task prompt | Only when a repository needs fixing and `ai.enabled` is true and the provider is not `none` | `ai.enabled` (central and per repo), `ai.provider`, per-repository overrides |
+| AI provider (GitHub Copilot, default model Claude Sonnet 5.5, or OpenAI) | **Source code and build output of repositories where AI is enabled**: files the model reads, failing diagnostics, the task prompt | Only when a repository needs fixing and `ai.enabled` is true and the provider is not `none` | `ai.enabled` (central and per repo), `ai.provider`, per-repository overrides |
 | Microsoft Learn MCP server | **Sanitized queries only**: public API names and diagnostic codes, capped at `ai.learnMcp.maxQueryLength`, filtered against `denyTerms`. No code, paths, identifiers from the repository or free text | When the AI looks up documentation | `ai.learnMcp.enabled`, `denyTerms`. Every outbound query is written to an audit log in `out/` |
+| Roslynk MCP server (local) | **Nothing leaves the machine.** It is a local Roslyn process spoken to over stdio; its `stdio` bridge talks to a daemon that listens on loopback only (`localhost:6502`) and is started on demand. It exports OpenTelemetry only if an OTLP endpoint is configured, and the agent removes all `OTEL_*` variables | When the AI asks for diagnostics, navigation or code fixes | `ai.roslynk.enabled` (a repository can only turn it off), `ai.roslynk.allowWriteTools` |
 | Azure DevOps (Azure Repos) | Clone and fetch, the agent branch, PR create/update, report comment | Every run (not in dry run) | Build Service permissions, `dryRun` |
 
 Nothing else is sent. There is no telemetry (`DOTNET_CLI_TELEMETRY_OPTOUT=1` is set for child processes).
@@ -26,6 +27,7 @@ Each child process gets only the credential category its job needs. Anything who
 | `dotnet restore`, package metadata queries | NuGet feeds | `VSS_NUGET_*`, `ARTIFACTS_CREDENTIALPROVIDER_*` and similar feed credentials only |
 | `dotnet build`, `dotnet test`, `dotnet format` | None | No secrets at all, because they execute repository code (analyzers, MSBuild targets, tests) |
 | AI provider process (Copilot CLI) / in-process OpenAI client | AI provider | Only its own token (`COPILOT_GITHUB_TOKEN` or `OPENAI_API_KEY`). It never sees `SYSTEM_ACCESSTOKEN` or feed credentials |
+| Roslynk MCP server | None | No secrets and no `OTEL_*` variables. Like a build, it evaluates and compiles the repository's projects (MSBuild targets, analyzers, source generators), so it must run without credentials |
 
 Rules that cut across the table:
 
@@ -39,6 +41,7 @@ Rules that cut across the table:
 - Edits are applied to the working tree and then validated by the change guard: files outside `allowedEditPatterns` and anything in `protectedPatterns` are **reverted**; if the change budget is exceeded the fix is rejected.
 - **Test tampering is detected.** Fixes that delete or weaken tests (removed test files, removed `[Fact]`/`[Test]` attributes, added skips or `Assert` removals) are flagged and reverted, so a "green" result cannot be obtained by making the tests pass vacuously.
 - Documentation lookups go through the local sanitizing proxy, never directly to the Learn endpoint.
+- **Roslynk** gives the AI compiler diagnostics, navigation and Roslyn code fixes/refactorings. Its write tools edit the working tree like the file tools do, so the same guards apply afterwards (allowed/protected patterns, change budget, test-tampering detection). Because Roslynk evaluates and compiles repository projects the way a build does, repository code (analyzers, generators, MSBuild targets) can execute inside it; it therefore runs with no secrets, exactly like `dotnet build`. Set `ai.roslynk.allowWriteTools` to `false` to make it read-only, or `ai.roslynk.enabled` to `false` to switch it off (a repository file can do the latter for itself).
 
 ## Other controls
 

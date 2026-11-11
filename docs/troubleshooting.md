@@ -7,7 +7,7 @@ Start with the run summary and the repository's report (`out/<project>__<repo>.m
 | Symptom | Cause and fix |
 |---|---|
 | `403` on clone or push, `TF401019`, "The Git repository ... does not exist or you do not have permissions" | The Build Service identity lacks permission on that repository. Grant Read, Contribute, Create branch, Contribute to pull requests to `<Project> Build Service (<Org>)` or `Project Collection Build Service (<Org>)` (whichever the pipeline runs as). See [setup.md](setup.md) section 4. |
-| `404` or "repository not found" only for repositories in **another project** | "Limit job authorization scope to current project for non-release pipelines" is on. Turn it off (organisation and project) or use a service-account PAT. |
+| `404` or "repository not found" | All targets must be in the project set in `config/repositories.json` (default: the pipeline's project); a repository in another project is an inventory error. If the project is right, check the Build Service identity `<Project> Build Service (<Org>)` has permissions on that repository. |
 | 403/404 for repositories in the **same project** that are not declared in the YAML | "Limit job authorization scope to referenced Azure DevOps repositories" or "Protect access to repositories in YAML pipelines" is on. Turn them off or use a PAT. |
 | PR creation fails with 403 but the push worked | Missing "Contribute to pull requests". |
 | Push rejected (`stale info` / force-with-lease) | Someone pushed to the agent branch after the run fetched it. Re-run; if humans own the branch the repository is skipped (see below). |
@@ -20,10 +20,14 @@ Start with the run summary and the repository's report (`out/<project>__<repo>.m
 |---|---|
 | "Copilot token missing" / provider unavailable; run is Draft with "AI unavailable" | `COPILOT_GITHUB_TOKEN` is not defined, not linked through the variable group, not marked for the pipeline or shows as the literal `$(COPILOT_GITHUB_TOKEN)`. Link `dependency-agent-secrets` to the pipeline and authorise it. |
 | Copilot CLI starts but is unauthorised | The token must be a fine-grained PAT of a Copilot-licensed user with the **Copilot Requests** permission, and must not have expired. Classic tokens and plain `GITHUB_TOKEN` are not accepted. |
+| Run is Draft with "model not available" / "unknown model" / "not enabled" | The token's Copilot user cannot use `ai.copilot.model` (default `claude-sonnet-5.5`). A Copilot organisation/enterprise owner may need to enable the model policy, or the id differs for your account: check the exact id in the Copilot CLI model picker (`/model`) and set `ai.copilot.model` in `config/defaults.json` (or `ai.model`). |
 | Copilot executable not found | The CLI install step failed or `ai.copilot.executable` is wrong. Check the "install" step log. |
 | OpenAI `429` / `insufficient_quota` | Quota or rate limit reached. Check billing and limits for the key; reduce `maxIterations` or the number of repositories per run; switch provider for the run with the pipeline parameter. |
 | OpenAI `401` | `OPENAI_API_KEY` wrong or not exposed (see the `$(...)` note above). |
 | AI changes were reverted | The edits touched files outside `allowedEditPatterns` or inside `protectedPatterns`. The report lists reverted files. Widen `allowedEditPatterns` only if appropriate; protected patterns are meant to stay protected. |
+| `roslynk: command not found` / Roslynk tools missing | The "Install Roslynk" step did not run (AI provider was `none`) or failed, or `$HOME/.dotnet/tools` is not on `PATH` (the step adds it with `##vso[task.prependpath]`). Locally run `dotnet tool install --global Roslynk --version 3.0.0` and add `~/.dotnet/tools` to `PATH`, or set `ai.roslynk.command`. Set `ai.roslynk.enabled` to `false` to run without it. |
+| Roslynk fails to start: port 6502 in use / address already in use | Roslynk's daemon listens on `localhost:6502`. Another process (a leftover daemon, or parallel runs on one machine) holds the port. Stop the other process; on Microsoft-hosted agents each matrix leg has its own VM so this does not occur there. |
+| Roslynk exits immediately or prints a banner/HTTP errors | `ai.roslynk.arguments` lacks `stdio`; `validate-config` reports this. |
 | No docs lookups in the audit log | `ai.learnMcp.enabled` is false, the endpoint is unreachable from the agent, or the proxy refused every query (see the audit log). |
 
 ## Restore and build

@@ -294,7 +294,25 @@
             "string",
             "null"
           ],
-          "description": "Model name. Null = provider default.",
+          "description": "Model name for any provider. Null = the provider's default (ai.copilot.model / ai.openAi.defaultModel).",
+          "default": null
+        },
+        "reasoningEffort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            null
+          ],
+          "description": "Reasoning effort for any provider (none, minimal, low, medium, high, xhigh, max). Null = the provider's default (ai.copilot.reasoningEffort / ai.openAi.reasoningEffort).",
           "default": null
         },
         "maxIterations": {
@@ -322,6 +340,30 @@
               "type": "string",
               "description": "Environment variable holding the GitHub token of a Copilot-licensed user.",
               "default": "COPILOT_GITHUB_TOKEN"
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Copilot model id used when ai.model is null. Confirm the exact id in the Copilot CLI model picker (/model) for the token's account.",
+              "default": "claude-sonnet-5.5"
+            },
+            "reasoningEffort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                null
+              ],
+              "description": "Reasoning effort passed to the Copilot CLI (--reasoning-effort) when ai.reasoningEffort is null. Null = Copilot default.",
+              "default": "high"
             }
           },
           "additionalProperties": false
@@ -353,6 +395,24 @@
               "minimum": 1,
               "description": "Max tool-calling turns per iteration.",
               "default": 40
+            },
+            "reasoningEffort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                null
+              ],
+              "description": "Reasoning effort for OpenAI reasoning models when ai.reasoningEffort is null. Null = model default.",
+              "default": null
             }
           },
           "additionalProperties": false
@@ -384,6 +444,45 @@
               },
               "description": "Extra terms (case-insensitive) that must never be sent, e.g. internal product or company names. Union-merged across layers.",
               "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "roslynk": {
+          "type": "object",
+          "description": "Roslynk (https://github.com/mrpmorris/Roslynk): local Roslyn MCP server giving the AI compiler diagnostics, navigation and Roslyn code fixes.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Offer Roslynk tools to the AI.",
+              "default": true
+            },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Executable of the installed .NET tool (the pipeline installs Roslynk 3.0.0 globally).",
+              "default": "roslynk"
+            },
+            "arguments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Arguments; must contain 'stdio' (otherwise Roslynk starts as an HTTP daemon).",
+              "default": [
+                "stdio"
+              ]
+            },
+            "serverName": {
+              "type": "string",
+              "minLength": 1,
+              "description": "MCP server name exposed to the AI.",
+              "default": "roslynk"
+            },
+            "allowWriteTools": {
+              "type": "boolean",
+              "description": "Allow Roslynk write tools (code fixes, refactorings, rename). Edits are still subject to the guards.",
+              "default": true
             }
           },
           "additionalProperties": false
@@ -723,7 +822,25 @@
                 "string",
                 "null"
               ],
-              "description": "Model name. Null = provider default.",
+              "description": "Model name for any provider. Null = the provider's default (ai.copilot.model / ai.openAi.defaultModel).",
+              "default": null
+            },
+            "reasoningEffort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                null
+              ],
+              "description": "Reasoning effort for any provider (none, minimal, low, medium, high, xhigh, max). Null = the provider's default (ai.copilot.reasoningEffort / ai.openAi.reasoningEffort).",
               "default": null
             },
             "maxIterations": {
@@ -751,6 +868,30 @@
                   "type": "string",
                   "description": "Environment variable holding the GitHub token of a Copilot-licensed user.",
                   "default": "COPILOT_GITHUB_TOKEN"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Copilot model id used when ai.model is null. Confirm the exact id in the Copilot CLI model picker (/model) for the token's account.",
+                  "default": "claude-sonnet-5.5"
+                },
+                "reasoningEffort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    null
+                  ],
+                  "description": "Reasoning effort passed to the Copilot CLI (--reasoning-effort) when ai.reasoningEffort is null. Null = Copilot default.",
+                  "default": "high"
                 }
               },
               "additionalProperties": false
@@ -782,6 +923,24 @@
                   "minimum": 1,
                   "description": "Max tool-calling turns per iteration.",
                   "default": 40
+                },
+                "reasoningEffort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh",
+                    "max",
+                    null
+                  ],
+                  "description": "Reasoning effort for OpenAI reasoning models when ai.reasoningEffort is null. Null = model default.",
+                  "default": null
                 }
               },
               "additionalProperties": false
@@ -813,6 +972,45 @@
                   },
                   "description": "Extra terms (case-insensitive) that must never be sent, e.g. internal product or company names. Union-merged across layers.",
                   "default": []
+                }
+              },
+              "additionalProperties": false
+            },
+            "roslynk": {
+              "type": "object",
+              "description": "Roslynk (https://github.com/mrpmorris/Roslynk): local Roslyn MCP server giving the AI compiler diagnostics, navigation and Roslyn code fixes.",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Offer Roslynk tools to the AI.",
+                  "default": true
+                },
+                "command": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Executable of the installed .NET tool (the pipeline installs Roslynk 3.0.0 globally).",
+                  "default": "roslynk"
+                },
+                "arguments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Arguments; must contain 'stdio' (otherwise Roslynk starts as an HTTP daemon).",
+                  "default": [
+                    "stdio"
+                  ]
+                },
+                "serverName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "MCP server name exposed to the AI.",
+                  "default": "roslynk"
+                },
+                "allowWriteTools": {
+                  "type": "boolean",
+                  "description": "Allow Roslynk write tools (code fixes, refactorings, rename). Edits are still subject to the guards.",
+                  "default": true
                 }
               },
               "additionalProperties": false

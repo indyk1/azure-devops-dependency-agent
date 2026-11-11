@@ -2,7 +2,7 @@
 
 ## Pipeline stages
 
-1. **Prepare.** The scheduled pipeline installs the required .NET SDKs (the agent's own SDK, and the SDK(s) target repositories pin in `global.json` where needed) and, if the Copilot provider is used, the Copilot CLI. `NuGetAuthenticate` makes private feed credentials available to restore.
+1. **Prepare.** The scheduled pipeline installs the required .NET SDKs (the agent's own SDK, and the SDK(s) target repositories pin in `global.json` where needed) and, if an AI provider may be used, the Copilot CLI and the pinned Roslynk .NET tool. `NuGetAuthenticate` makes private feed credentials available to restore.
 2. **Run.** `DependencyAgent.Cli` loads `config/defaults.json`, `config/repositories.json` and `config/rewrite-rules.json`, applies the `repositories` filter and processes the selected repositories one at a time. A failure in one repository never stops the others.
 3. **Publish.** Per-repository reports, a run summary table and the Learn audit logs are published as pipeline artifacts; the summary also appears on the run page.
 
@@ -48,7 +48,7 @@ flowchart TD
 6. **Commit.** `chore(deps): upgrade to net10.0 and update packages` (message summarises the changes). If nothing changed the outcome is `UpToDate` and nothing is pushed.
 7. **Build and test.** `dotnet restore` (feed credentials only), `dotnet build --no-restore` and `dotnet test --no-build` (no secrets), using `verification.*` settings.
 8. **Rule-based fixes.** If the build fails, rewrite rules whose `diagnostics` appear in the output are applied to the files those diagnostics point at, plus optional `dotnet format analyzers` for `ruleFixes.formatDiagnostics`. The build is re-run.
-9. **AI loop.** If still failing (or there are new warnings) and AI is enabled and available, the provider receives the failing diagnostics, prior changes and the allowed/protected patterns, edits files in the working tree, and the agent re-builds. At most `ai.maxIterations` iterations. Documentation lookups go through the sanitizing Learn proxy. If the provider is not available (token missing, CLI absent) this is recorded and the loop is skipped.
+9. **AI loop.** If still failing (or there are new warnings) and AI is enabled and available, the provider (by default the Copilot CLI with Claude Sonnet 5.5 at high reasoning effort) receives the failing diagnostics, prior changes and the allowed/protected patterns, edits files in the working tree, and the agent re-builds. At most `ai.maxIterations` iterations. The AI has two tool servers: `learn` (documentation lookups through the sanitizing Learn proxy) and `roslynk` (local Roslyn diagnostics, navigation and code fixes; its edits are subject to the same guards). If the provider is not available (token missing, CLI absent) this is recorded and the loop is skipped.
 10. **Guards.** The change guard compares the working tree to the commit that holds the deterministic updates: files outside the allowed patterns or inside protected paths are reverted; the change budget (`maxChangedFiles`, `maxChangedLines`, excluding `budgetExcludePatterns`) is checked; test-tampering is detected. Violations are recorded as failure reasons.
 11. **New-warnings gate.** If `failOnNewWarnings`, any warning in the upgraded build that is not in the baseline (compared by code, file and message, ignoring line numbers) makes the run not green.
 12. **Commit fixes.** `fix: adapt code to net10.0 API changes` for rule and AI changes.

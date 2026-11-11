@@ -74,19 +74,32 @@ Property names are camelCase and matched case-insensitively. Omitted properties 
 |---|---|---|
 | `enabled` | `true` | Allow AI fixing. |
 | `provider` | `copilot` | `copilot`, `openai` or `none`. Overridable per run through the pipeline parameter. |
-| `model` | `null` | Model name; `null` = provider default (`openAi.defaultModel` for OpenAI). |
+| `model` | `null` | Model for any provider; `null` = the provider's own default (`copilot.model`, `openAi.defaultModel`). |
+| `reasoningEffort` | `null` | Reasoning effort for any provider: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`; `null` = the provider's own default (`copilot.reasoningEffort`, `openAi.reasoningEffort`). |
 | `maxIterations` | `3` | Maximum build-then-fix iterations. |
 | `timeoutMinutes` | `20` | Wall-clock limit for one provider invocation. |
 | `copilot.executable` | `copilot` | GitHub Copilot CLI executable. |
 | `copilot.tokenVariable` | `COPILOT_GITHUB_TOKEN` | Environment variable with the token. |
+| `copilot.model` | `claude-sonnet-5.5` | Copilot model id used when `ai.model` is `null`. Confirm the id in the Copilot CLI model picker (`/model`) for the token's account and change it here if it differs. |
+| `copilot.reasoningEffort` | `high` | Passed to the Copilot CLI (`--reasoning-effort`) when `ai.reasoningEffort` is `null`. `null` = Copilot default. |
 | `openAi.endpoint` | `null` | Base URL for OpenAI-compatible endpoints; `null` = api.openai.com. |
 | `openAi.apiKeyVariable` | `OPENAI_API_KEY` | Environment variable with the API key. |
 | `openAi.defaultModel` | `gpt-5.1` | Model when `ai.model` is `null`. |
+| `openAi.reasoningEffort` | `null` | Reasoning effort for OpenAI reasoning models when `ai.reasoningEffort` is `null`; `null` = model default. |
 | `openAi.maxToolTurns` | `40` | Tool-calling turns per iteration. |
 | `learnMcp.enabled` | `true` | Allow Microsoft Learn lookups through the sanitizing proxy. |
 | `learnMcp.endpoint` | `https://learn.microsoft.com/api/mcp` | Learn MCP endpoint. |
 | `learnMcp.maxQueryLength` | `200` | Maximum length of a sanitized query. |
 | `learnMcp.denyTerms` | `[]` | Case-insensitive terms that must never leave the agent (internal product or company names). |
+| `roslynk.enabled` | `true` | Offer the [Roslynk](https://github.com/mrpmorris/Roslynk) MCP server (MIT) to the AI: compiler diagnostics (`get_diagnostics`), navigation and references, Roslyn code fixes and refactorings. A repository file can only turn it off. |
+| `roslynk.command` | `roslynk` | Executable of the installed .NET tool (the pipeline installs `Roslynk` 3.0.0 globally and puts `~/.dotnet/tools` on `PATH`). |
+| `roslynk.arguments` | `["stdio"]` | Arguments; must contain `stdio` (without it the tool starts as an HTTP daemon instead of an MCP stdio server). `validate-config` checks this. |
+| `roslynk.serverName` | `roslynk` | MCP server name exposed to the AI. |
+| `roslynk.allowWriteTools` | `true` | Allow Roslynk's write tools (code fixes, refactorings, rename). Edits made through them are still subject to the guards (allowed/protected patterns, budget, test-tampering detection). |
+
+**Model and effort precedence.** The effective model is `ai.model` if set, otherwise the provider's setting (`ai.copilot.model` for Copilot, `ai.openAi.defaultModel` for OpenAI). The effective reasoning effort is `ai.reasoningEffort` if set, otherwise `ai.copilot.reasoningEffort` / `ai.openAi.reasoningEffort`. Because `ai.model` and `ai.reasoningEffort` apply to whichever provider is active, leave them `null` when you switch providers per run, and set provider-specific values in `copilot.*` / `openAi.*` instead. To change the Copilot model, set `ai.copilot.model` (confirm the id with `/model` in the Copilot CLI for the token's account); a central `overrides` block can do this per repository.
+
+Roslynk starts a loopback-only daemon on `localhost:6502` on demand and evaluates/compiles the solution like a build, so it runs without secrets. The agent removes `OTEL_*` variables so no telemetry is exported.
 
 ### `pullRequest`
 
@@ -99,11 +112,13 @@ Property names are camelCase and matched case-insensitively. Omitted properties 
 
 ## `repositories.json`
 
+All target repositories live in **one Azure DevOps project**: the top-level `project`. When it is omitted, the pipeline's own project (`SYSTEM_TEAMPROJECT`) is used; if neither exists loading fails.
+
 ```json
 {
+  "project": "Engineering",
   "repositories": [
     {
-      "project": "Engineering",
       "repository": "ExampleService",
       "baseBranch": "main",
       "enabled": true,
@@ -117,8 +132,8 @@ Property names are camelCase and matched case-insensitively. Omitted properties 
 
 | Field | Required | Default | Meaning |
 |---|---|---|---|
-| `project` | yes | | Azure DevOps project name. |
-| `repository` | yes | | Repository name. `project/repository` must be unique (case-insensitive) or loading fails. |
+| `project` | no | top-level `project` | Deprecated. If present it must equal the top-level project (case-insensitive); naming a different project is an error. |
+| `repository` | yes | | Repository name. Must be unique (case-insensitive) or loading fails. |
 | `baseBranch` | no | `main` | Branch the PR targets. |
 | `enabled` | no | `true` | Kill switch. Disabled entries are never processed, whatever the filter says. |
 | `ring` | no | none | Rollout label usable in the run filter. |
@@ -131,12 +146,12 @@ The pipeline's `repositories` parameter selects entries. `*` or empty selects al
 
 | Token | Matches |
 |---|---|
-| `Project/Repo` | The exact project and repository (case-insensitive). |
-| `Repo` | The repository name in any project. |
-| `Data/*`, `*/Api`, `Pay*` | Globs (`*`, `?`) on `Project/Repo` (when the token has a `/`) or on the repository name. |
+| `Repo` | The repository name (case-insensitive). |
+| `Project/Repo` | Same, with the project spelled out (it must be the inventory's project). |
+| `Data/*`, `*/Api`, `Pay*` | Globs (`*`, `?`) on the repository name (or on `Project/Repo` when the token has a `/`). |
 | `ring:pilot`, `ring:b*` | Entries whose `ring` matches. |
 
-Example: `ring:pilot, Data/Etl`.
+Example: `ring:pilot, Etl`. The CLI's `run --repository` takes `Repo` or `Project/Repo`.
 
 ## Per-repository file `.dependency-agent.json`
 
@@ -149,14 +164,15 @@ A team can put this file at the root of its repository. It can only make the age
 | `ai.enabled` | Can only turn AI **off**. `true` cannot enable what is disabled centrally. |
 | `ai.learnMcp.enabled` | Can only turn lookups off. |
 | `ai.learnMcp.denyTerms` | Unioned with the central terms. |
-| `packages.*`, `docker.*`, `verification.*`, `ruleFixes.*`, `pullRequest.*`, `ai.model`, `ai.maxIterations`, `ai.timeoutMinutes`, `guards.allowedEditPatterns`, `guards.budgetExcludePatterns` | Override the defaults. |
-| `ai.provider`, `ai.openAi`, `ai.copilot`, `ai.learnMcp.endpoint`, `gitIdentity`, `branchName` | **Ignored.** Credentials, endpoints and identity are controlled centrally only. |
+| `ai.roslynk.enabled` | Can only turn Roslynk off. Other `ai.roslynk.*` keys (`command`, `arguments`, `serverName`, `allowWriteTools`) are ignored. |
+| `packages.*`, `docker.*`, `verification.*`, `ruleFixes.*`, `pullRequest.*`, `ai.model`, `ai.reasoningEffort`, `ai.maxIterations`, `ai.timeoutMinutes`, `guards.allowedEditPatterns`, `guards.budgetExcludePatterns` | Override the defaults. |
+| `ai.provider`, `ai.openAi`, `ai.copilot` (including model and reasoning effort), `ai.learnMcp.endpoint`, `gitIdentity`, `branchName` | **Ignored.** Credentials, endpoints and identity are controlled centrally only. |
 
 ### Precedence
 
 `defaults.json` -> repo `.dependency-agent.json` -> central `overrides` in `repositories.json` (highest). Objects merge recursively; arrays and scalars replace. The safety rules above are then applied so a repository file can never loosen a central control.
 
-Safety settings are computed explicitly rather than by plain merging, so a central `overrides` block cannot mask a repository's stricter value: `guards.protectedPatterns` and `ai.learnMcp.denyTerms` are the union of `defaults.json`, central `overrides` and the repo file (a central override adds to the defaults, it never replaces them); `guards.maxChangedFiles`/`maxChangedLines` take the lower of the central value and the repo file; `ai.enabled`/`ai.learnMcp.enabled` are the central value AND the repo file. All key matching, including the "ignored keys" list, is case-insensitive.
+Safety settings are computed explicitly rather than by plain merging, so a central `overrides` block cannot mask a repository's stricter value: `guards.protectedPatterns` and `ai.learnMcp.denyTerms` are the union of `defaults.json`, central `overrides` and the repo file (a central override adds to the defaults, it never replaces them); `guards.maxChangedFiles`/`maxChangedLines` take the lower of the central value and the repo file; `ai.enabled`/`ai.learnMcp.enabled`/`ai.roslynk.enabled` are the central value AND the repo file. All key matching, including the "ignored keys" list, is case-insensitive.
 
 ## Package policy examples
 

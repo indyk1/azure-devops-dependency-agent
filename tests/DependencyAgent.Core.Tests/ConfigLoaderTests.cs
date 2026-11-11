@@ -68,18 +68,19 @@ public class ConfigLoaderTests
 
     // ---- inventory ----
 
-    private static RepositoryInventory LoadInventory(string json)
+    private static RepositoryInventory LoadInventory(string json, Func<string, string?>? getVariable = null)
     {
         using var dir = new TempDir();
         dir.Touch("repositories.json", json);
-        return ConfigLoader.LoadInventory(dir.Path);
+        return ConfigLoader.LoadInventory(dir.Path, getVariable ?? (_ => null));
     }
 
     [Fact]
     public void Shipped_inventory_loads()
     {
-        var inventory = ConfigLoader.LoadInventory(TestSupport.ConfigDirectory);
+        var inventory = ConfigLoader.LoadInventory(TestSupport.ConfigDirectory, _ => null);
         Assert.NotNull(inventory.Repositories);
+        Assert.False(string.IsNullOrWhiteSpace(inventory.Project));
     }
 
     [Fact]
@@ -88,14 +89,16 @@ public class ConfigLoaderTests
         var inventory = LoadInventory("""
             {
               "$schema": "../schemas/repositories.schema.json",
+              "project": "P",
               "repositories": [
-                { "project": "P", "repository": "R" },
-                { "project": "P2", "repository": "R2", "baseBranch": "develop", "enabled": false, "ring": "pilot",
+                { "repository": "R" },
+                { "repository": "R2", "baseBranch": "develop", "enabled": false, "ring": "pilot",
                   "owners": ["a", "b"], "overrides": { "ai": { "enabled": false } }, },
               ]
             }
             """);
 
+        Assert.Equal("P", inventory.Project);
         Assert.Equal(2, inventory.Repositories.Count);
         var first = inventory.Repositories[0];
         Assert.Equal("main", first.BaseBranch);
@@ -105,6 +108,7 @@ public class ConfigLoaderTests
         Assert.Equal("P/R", first.Key);
 
         var second = inventory.Repositories[1];
+        Assert.Equal("P", second.Project);
         Assert.Equal("develop", second.BaseBranch);
         Assert.False(second.Enabled);
         Assert.Equal("pilot", second.Ring);
@@ -115,36 +119,78 @@ public class ConfigLoaderTests
     [Fact]
     public void Inventory_is_case_insensitive_for_property_names()
     {
-        var inventory = LoadInventory("""{ "Repositories": [ { "Project": "P", "Repository": "R" } ] }""");
+        var inventory = LoadInventory("""{ "Project": "P", "Repositories": [ { "Repository": "R" } ] }""");
         Assert.Equal("P/R", Assert.Single(inventory.Repositories).Key);
     }
 
     [Fact]
-    public void Inventory_rejects_duplicates_ignoring_case()
+    public void Inventory_top_level_project_is_applied_to_every_entry()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory("""
-            { "repositories": [ { "project": "P", "repository": "R" }, { "project": "p", "repository": "r" } ] }
-            """));
-        Assert.Contains("Duplicate", ex.Message);
-        Assert.Contains("P/R", ex.Message);
+        var inventory = LoadInventory(
+            """{ "project": "Engineering", "repositories": [ { "repository": "A" }, { "repository": "B" } ] }""",
+            name => name == ConfigLoader.TeamProjectVariable ? "PipelineProject" : null);
+
+        Assert.All(inventory.Repositories, r => Assert.Equal("Engineering", r.Project));
+    }
+
+    [Fact]
+    public void Inventory_falls_back_to_the_pipeline_project_variable()
+    {
+        var inventory = LoadInventory(
+            """{ "repositories": [ { "repository": "A" } ] }""",
+            name => name == "SYSTEM_TEAMPROJECT" ? "PipelineProject" : null);
+
+        Assert.Equal("PipelineProject", inventory.Project);
+        Assert.Equal("PipelineProject/A", Assert.Single(inventory.Repositories).Key);
+    }
+
+    [Fact]
+    public void Inventory_without_any_project_is_an_error()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory("""{ "repositories": [ { "repository": "A" } ] }"""));
+        Assert.Contains("project", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("SYSTEM_TEAMPROJECT", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Inventory_entry_naming_a_different_project_is_an_error()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory(
+            """{ "project": "P", "repositories": [ { "project": "Other", "repository": "A" } ] }"""));
+        Assert.Contains("Other", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("'P'", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Inventory_entry_repeating_the_project_is_accepted_ignoring_case()
+    {
+        var inventory = LoadInventory("""{ "project": "P", "repositories": [ { "project": "p", "repository": "A" } ] }""");
+        Assert.Equal("P/A", Assert.Single(inventory.Repositories).Key);
+    }
+
+    [Fact]
+    public void Inventory_rejects_duplicate_repository_names_ignoring_case()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory(
+            """{ "project": "P", "repositories": [ { "repository": "R" }, { "repository": "r" } ] }"""));
+        Assert.Contains("Duplicate", ex.Message, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData("""{ "repositories": [ { "repository": "R" } ] }""")]
-    [InlineData("""{ "repositories": [ { "project": "P" } ] }""")]
-    [InlineData("""{ "repositories": [ { "project": " ", "repository": "R" } ] }""")]
-    [InlineData("""{ "repositories": [ { "project": "P", "repository": "" } ] }""")]
-    public void Inventory_rejects_entries_missing_project_or_repository(string json)
+    [InlineData("""{ "project": "P", "repositories": [ { } ] }""")]
+    [InlineData("""{ "project": "P", "repositories": [ { "repository": " " } ] }""")]
+    [InlineData("""{ "project": "P", "repositories": [ { "project": "P", "repository": "" } ] }""")]
+    public void Inventory_rejects_entries_missing_repository(string json)
     {
         var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory(json));
-        Assert.Contains("'project' and 'repository'", ex.Message);
+        Assert.Contains("needs 'repository'", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Inventory_file_missing_throws()
     {
         using var dir = new TempDir();
-        Assert.Throws<FileNotFoundException>(() => ConfigLoader.LoadInventory(dir.Path));
+        Assert.Throws<FileNotFoundException>(() => ConfigLoader.LoadInventory(dir.Path, _ => null));
     }
 
     [Fact]
@@ -152,6 +198,53 @@ public class ConfigLoaderTests
     {
         var ex = Assert.Throws<InvalidOperationException>(() => LoadInventory("{ oops"));
         Assert.Contains("repositories.json", ex.Message);
+    }
+
+    [Fact]
+    public void Shipped_defaults_use_copilot_sonnet_with_high_reasoning_and_roslynk()
+    {
+        var ai = Effective().Ai;
+        Assert.Equal("copilot", ai.Provider);
+        Assert.Null(ai.Model);
+        Assert.Null(ai.ReasoningEffort);
+        Assert.Equal("claude-sonnet-5.5", ai.Copilot.Model);
+        Assert.Equal("high", ai.Copilot.ReasoningEffort);
+        Assert.Null(ai.OpenAi.ReasoningEffort);
+        Assert.True(ai.Roslynk.Enabled);
+        Assert.Equal("roslynk", ai.Roslynk.Command);
+        Assert.Equal(["stdio"], ai.Roslynk.Arguments);
+        Assert.Equal("roslynk", ai.Roslynk.ServerName);
+        Assert.True(ai.Roslynk.AllowWriteTools);
+    }
+
+    [Fact]
+    public void Roslynk_repo_override_can_only_turn_it_off()
+    {
+        var s = Effective("""
+            { "ai": { "roslynk": { "enabled": false, "command": "evil", "arguments": ["--x"], "serverName": "x", "allowWriteTools": false } } }
+            """);
+        Assert.False(s.Ai.Roslynk.Enabled);
+        Assert.Equal("roslynk", s.Ai.Roslynk.Command);
+        Assert.Equal(["stdio"], s.Ai.Roslynk.Arguments);
+        Assert.Equal("roslynk", s.Ai.Roslynk.ServerName);
+        Assert.True(s.Ai.Roslynk.AllowWriteTools);
+    }
+
+    [Fact]
+    public void Roslynk_repo_override_cannot_turn_it_on_when_central_config_disabled_it()
+    {
+        var s = Effective("""{ "ai": { "roslynk": { "enabled": true } } }""", """{ "ai": { "roslynk": { "enabled": false } } }""");
+        Assert.False(s.Ai.Roslynk.Enabled);
+    }
+
+    [Fact]
+    public void Model_and_effort_settings_are_central_only_for_repo_files()
+    {
+        var s = Effective("""{ "ai": { "model": "gpt-x", "reasoningEffort": "low", "copilot": { "model": "m", "reasoningEffort": "low" } } }""",
+            """{ "ai": { "copilot": { "model": "central-model" }, "reasoningEffort": "medium" } }""");
+        Assert.Equal("central-model", s.Ai.Copilot.Model);
+        Assert.Equal("high", s.Ai.Copilot.ReasoningEffort);
+        Assert.Equal("medium", s.Ai.ReasoningEffort);
     }
 
     // ---- Select ----

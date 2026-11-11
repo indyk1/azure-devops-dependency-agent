@@ -17,7 +17,7 @@ schedules:
 
 parameters:
   - name: repositories
-    displayName: 'Repositories to process: * | Project/Repo | Repo | ring:<name> | comma-separated list'
+    displayName: 'Repositories to process: * | Repo | ring:<name> | comma-separated list (all repositories are in the project set in config/repositories.json)'
     type: string
     default: '*'
   - name: dryRun
@@ -25,7 +25,7 @@ parameters:
     type: boolean
     default: false
   - name: aiProvider
-    displayName: 'AI provider for code fixes'
+    displayName: 'AI provider for code fixes (config = config/defaults.json: Copilot, Claude Sonnet 5.5, high reasoning effort)'
     type: string
     default: config
     values:
@@ -48,6 +48,9 @@ variables:
   # Pinned @github/copilot npm version (flags verified against this version; see CopilotCliProvider.VerifiedVersion). Never use "latest" for an unattended job.
   - name: copilotCliVersion
     value: '1.0.109'
+  # Pinned Roslynk .NET tool (local Roslyn MCP server used by the AI for diagnostics, navigation and code fixes).
+  - name: roslynkVersion
+    value: '3.0.0'
 
 pool:
   vmImage: ubuntu-latest
@@ -152,19 +155,25 @@ stages:
                   versionSpec: 22.x
               - script: npm install -g @github/copilot@$(copilotCliVersion)
                 displayName: Install Copilot CLI $(copilotCliVersion)
+          # Roslynk (MCP server for Roslyn diagnostics/fixes) is only needed when an AI provider may be used.
+          - ${{ if ne(parameters.aiProvider, 'none') }}:
+              - script: |
+                  set -euo pipefail
+                  dotnet tool install --global Roslynk --version $(roslynkVersion)
+                  echo "##vso[task.prependpath]$HOME/.dotnet/tools"
+                displayName: Install Roslynk $(roslynkVersion)
           - script: |
               set -euo pipefail
               args=(run
                 --config "$(Build.SourcesDirectory)/config"
-                --repository "$TARGET_PROJECT/$TARGET_REPOSITORY"
+                --repository "$TARGET_REPOSITORY"
                 --output "$OUT_DIR"
                 --work-dir "$(Agent.TempDirectory)/work"
                 --ai-provider "$AI_PROVIDER")
               if [ "${DRY_RUN,,}" = "true" ]; then args+=(--dry-run); fi
               dotnet "$(Pipeline.Workspace)/tool/dependency-agent.dll" "${args[@]}"
-            displayName: Upgrade $(targetProject)/$(targetRepository)
+            displayName: Upgrade $(targetRepository)
             env:
-              TARGET_PROJECT: $(targetProject)
               TARGET_REPOSITORY: $(targetRepository)
               OUT_DIR: $(Build.ArtifactStagingDirectory)/out
               AI_PROVIDER: ${{ parameters.aiProvider }}
@@ -174,13 +183,12 @@ stages:
               COPILOT_GITHUB_TOKEN: $(COPILOT_GITHUB_TOKEN)
               OPENAI_API_KEY: $(OPENAI_API_KEY)
           - script: |
-              name="report-${TARGET_PROJECT}-${TARGET_REPOSITORY}"
+              name="report-${TARGET_REPOSITORY}"
               safe=`printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_'`
               echo "##vso[task.setvariable variable=reportArtifact]$safe"
             displayName: Sanitize artifact name
             condition: always()
             env:
-              TARGET_PROJECT: $(targetProject)
               TARGET_REPOSITORY: $(targetRepository)
           - publish: $(Build.ArtifactStagingDirectory)/out
             artifact: $(reportArtifact)

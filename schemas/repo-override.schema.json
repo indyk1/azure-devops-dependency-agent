@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Repository override (.dependency-agent.json)",
-  "description": "Optional file at the root of a target repository. Merged over config/defaults.json and under the central per-repository 'overrides'. A repository can only make the agent stricter. IGNORED keys: ai.provider, ai.openAi, ai.copilot, ai.learnMcp.endpoint, gitIdentity, branchName. TIGHTEN-ONLY keys: guards.protectedPatterns (union with central), guards.maxChangedFiles and guards.maxChangedLines (lower of the two), ai.enabled and ai.learnMcp.enabled (can only turn off), ai.learnMcp.denyTerms (union). All other keys override the defaults. The file itself is a protected path: the agent never edits it.",
+  "description": "Optional file at the root of a target repository. Merged over config/defaults.json and under the central per-repository 'overrides'. A repository can only make the agent stricter. IGNORED keys: ai.provider, ai.openAi, ai.copilot, ai.roslynk.* except 'enabled', ai.learnMcp.endpoint, gitIdentity, branchName. TIGHTEN-ONLY keys: guards.protectedPatterns (union with central), guards.maxChangedFiles and guards.maxChangedLines (lower of the two), ai.enabled, ai.learnMcp.enabled and ai.roslynk.enabled (can only turn off), ai.learnMcp.denyTerms (union). All other keys override the defaults. The file itself is a protected path: the agent never edits it.",
   "type": "object",
   "properties": {
     "$schema": {
@@ -294,7 +294,25 @@
             "string",
             "null"
           ],
-          "description": "Model name. Null = provider default.",
+          "description": "Model name for any provider. Null = the provider's default (ai.copilot.model / ai.openAi.defaultModel).",
+          "default": null
+        },
+        "reasoningEffort": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max",
+            null
+          ],
+          "description": "Reasoning effort for any provider (none, minimal, low, medium, high, xhigh, max). Null = the provider's default (ai.copilot.reasoningEffort / ai.openAi.reasoningEffort).",
           "default": null
         },
         "maxIterations": {
@@ -322,6 +340,30 @@
               "type": "string",
               "description": "Environment variable holding the GitHub token of a Copilot-licensed user.",
               "default": "COPILOT_GITHUB_TOKEN"
+            },
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Copilot model id used when ai.model is null. Confirm the exact id in the Copilot CLI model picker (/model) for the token's account.",
+              "default": "claude-sonnet-5.5"
+            },
+            "reasoningEffort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                null
+              ],
+              "description": "Reasoning effort passed to the Copilot CLI (--reasoning-effort) when ai.reasoningEffort is null. Null = Copilot default.",
+              "default": "high"
             }
           },
           "additionalProperties": false
@@ -353,6 +395,24 @@
               "minimum": 1,
               "description": "Max tool-calling turns per iteration.",
               "default": 40
+            },
+            "reasoningEffort": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "enum": [
+                "none",
+                "minimal",
+                "low",
+                "medium",
+                "high",
+                "xhigh",
+                "max",
+                null
+              ],
+              "description": "Reasoning effort for OpenAI reasoning models when ai.reasoningEffort is null. Null = model default.",
+              "default": null
             }
           },
           "additionalProperties": false
@@ -384,6 +444,18 @@
               },
               "description": "Extra terms (case-insensitive) that must never be sent, e.g. internal product or company names. Union-merged across layers. In a repository file: added to the central deny terms.",
               "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "roslynk": {
+          "type": "object",
+          "description": "Roslynk (https://github.com/mrpmorris/Roslynk): local Roslyn MCP server giving the AI compiler diagnostics, navigation and Roslyn code fixes. In a repository file only 'enabled' is allowed (can only turn Roslynk off).",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Offer Roslynk tools to the AI. In a repository file: can only turn Roslynk off.",
+              "default": true
             }
           },
           "additionalProperties": false
