@@ -87,16 +87,49 @@ public sealed class AiFixer : ICodeFixer
         try
         {
             var learnProxy = BuildLearnProxyForRun(context, ref tempDir);
+            string? roslynkMissing = null;
+            var roslynk = BuildRoslynkForRun(context, ref tempDir, ref roslynkMissing);
+            var openAi = provider.Name.Equals("openai", StringComparison.OrdinalIgnoreCase);
+            var learnAvailable = learnProxy is not null || (ai.LearnMcp.Enabled && openAi);
+            var model = AiRunDefaults.EffectiveModel(provider.Name, null, settings);
+            var (effort, effortNote) = AiRunDefaults.ValidateEffort(provider.Name, AiRunDefaults.RequestedEffort(provider.Name, null, settings));
+            var servers = new List<string>();
+            if (learnAvailable)
+            {
+                servers.Add(CopilotCliProvider.LearnServerName);
+            }
+
+            if (roslynk.Command is not null)
+            {
+                servers.Add(ai.Roslynk.ServerName);
+            }
+
+            notes.Add($"AI tools: {(servers.Count == 0 ? "none (file tools only)" : string.Join(", ", servers))}; provider {provider.Name}, model {model}, reasoning effort {effort ?? "provider default"}.");
+            if (roslynkMissing is not null)
+            {
+                notes.Add($"AI warning: Roslynk command '{roslynkMissing}' was not found (dotnet tool install --global Roslynk --version 3.0.0); continuing without Roslyn tools.");
+            }
+
+            if (effortNote is not null)
+            {
+                notes.Add("AI warning: " + effortNote);
+            }
+
             var runRequest = new AiRunRequest
             {
                 WorkingDirectory = root,
                 SystemPrompt = PromptBuilder.BuildSystemPrompt(
                     settings.TargetFramework, settings.Guards.AllowedEditPatterns, settings.Guards.ProtectedPatterns,
-                    docsToolsAvailable: learnProxy is not null || (ai.LearnMcp.Enabled && provider.Name.Equals("openai", StringComparison.OrdinalIgnoreCase))),
+                    docsToolsAvailable: learnAvailable,
+                    roslynkSolutionPath: roslynk.Command is not null ? roslynk.SolutionPath : null,
+                    roslynkWriteTools: ai.Roslynk.AllowWriteTools),
                 TaskPrompt = PromptBuilder.BuildTaskPrompt(settings.TargetFramework, request, ai.MaxIterations),
                 AllowedEditPatterns = settings.Guards.AllowedEditPatterns,
                 ProtectedPatterns = settings.Guards.ProtectedPatterns,
-                Model = ai.Model,
+                Model = model,
+                ReasoningEffort = effort,
+                RoslynkCommand = roslynk.Command,
+                SolutionPath = roslynk.Command is not null ? roslynk.SolutionPath : null,
                 Timeout = TimeSpan.FromMinutes(Math.Max(1, ai.TimeoutMinutes)),
                 LearnProxyCommand = learnProxy,
                 LearnDocs = ai.LearnMcp.Enabled ? _docsFactory(context) : null,
@@ -258,6 +291,45 @@ public sealed class AiFixer : ICodeFixer
         var audit = AuditLogPath(context);
         Directory.CreateDirectory(Path.GetDirectoryName(audit)!);
         return BuildLearnProxyCommand(exe, learn, denyFile, audit);
+    }
+
+    /// <summary>Roslynk command (null when disabled or there is no loadable solution) and the solution it should open.</summary>
+    private (IReadOnlyList<string>? Command, string? SolutionPath) BuildRoslynkForRun(RepoContext context, ref string? tempDir, ref string? roslynkMissing)
+    {
+        var cfg = context.Settings.Ai.Roslynk;
+        if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Command))
+        {
+            return (null, null);
+        }
+
+        if (ExecutableLocator.Find(cfg.Command) is null)
+        {
+            context.Logger.LogWarning("Roslynk command '{Command}' was not found; continuing without Roslyn tools", cfg.Command);
+            roslynkMissing = cfg.Command;
+            return (null, null);
+        }
+
+        // Any generated solution lives outside the repository so it is never part of the diff and the AI cannot edit it.
+        tempDir ??= Path.Combine(Path.GetTempPath(), "depagent-run-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        string? solution;
+        try
+        {
+            solution = SolutionPathResolver.Resolve(context.WorkingDirectory, context.Settings.Verification, Path.Combine(tempDir, "roslynk"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            context.Logger.LogWarning(ex, "Could not determine a solution for Roslynk");
+            solution = null;
+        }
+
+        if (solution is null)
+        {
+            return (null, null);
+        }
+
+        IReadOnlyList<string> command = [cfg.Command, .. cfg.Arguments];
+        return (command, solution);
     }
 
     private static void TryDeleteDirectory(string? dir)

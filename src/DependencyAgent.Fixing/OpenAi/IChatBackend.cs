@@ -29,6 +29,9 @@ public sealed record ChatMessageItem(ChatRole Role, string? Content, IReadOnlyLi
 /// <param name="Truncated">The model stopped because of the output length limit.</param>
 public sealed record ChatTurn(string? Text, IReadOnlyList<ToolCallRequest> ToolCalls, bool Truncated = false);
 
+/// <summary>Settings for creating a chat backend. ReasoningEffort is already validated (minimal/low/medium/high) or null.</summary>
+public sealed record ChatBackendOptions(string Model, string ApiKey, string? Endpoint, string? ReasoningEffort = null);
+
 /// <summary>Thin seam over the OpenAI SDK <c>ChatClient</c>.</summary>
 public interface IChatBackend
 {

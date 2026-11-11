@@ -90,9 +90,10 @@ public class CopilotCliProviderTests : IDisposable
     }
 
     [Fact]
-    public void ModelFlag_OnlyWhenConfigured()
+    public void ModelFlag_DefaultsToProviderModel_AndRequestOverrides()
     {
-        Assert.DoesNotContain("--model", CopilotCliProvider.BuildProcessSpec(Request(), Settings(), Token, "/c").Arguments);
+        var def = CopilotCliProvider.BuildProcessSpec(Request(), Settings(), Token, "/c").Arguments;
+        Assert.Equal("claude-sonnet-5.5", def[def.ToList().IndexOf("--model") + 1]);
         var args = CopilotCliProvider.BuildProcessSpec(Request(model: "gpt-5"), Settings(), Token, "/c").Arguments;
         Assert.Equal("gpt-5", args[args.ToList().IndexOf("--model") + 1]);
     }

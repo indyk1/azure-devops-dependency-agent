@@ -11,6 +11,7 @@
     <PackageVersion Include="NuGet.Versioning" Version="8.0.0" />
     <PackageVersion Include="OpenAI" Version="2.15.0" />
     <PackageVersion Include="ModelContextProtocol" Version="2.4.0" />
+    <PackageVersion Include="ModelContextProtocol.Core" Version="2.4.0" />
     <!-- Transitive pin: NuGet.Protocol depends on a vulnerable 8.0.x version. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.1" />
