@@ -7,6 +7,9 @@
     <PackageReference Include="NuGet.Versioning" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="DependencyAgent.Updates.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../DependencyAgent.Core/DependencyAgent.Core.csproj" />
   </ItemGroup>
 </Project>
